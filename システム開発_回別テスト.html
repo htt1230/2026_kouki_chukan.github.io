@@ -1,0 +1,1073 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>出題 | Moodle Quiz Scraper</title>
+  <style>
+    :root {
+      --bg-main: #f8f9fa;
+      --surface: #ffffff;
+      --primary: #2563eb;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --correct: #17633b;
+      --correctBack: #d3ffe8;
+      --incorrect: #b42318;
+      --incorrectBack: #ebc1be;
+    }
+
+    * { box-sizing: border-box; }
+    .hidden { display: none !important; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg-main);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "BIZ UDPGothic", "Hiragino Kaku Gothic ProN", sans-serif;
+      font-size: .85rem;
+    }
+
+    .app {
+      width: min(720px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 32px 0 60px;
+    }
+
+    h1 {
+      margin: 0 0 4px;
+      font-size: 1.15rem;
+      font-weight: 700;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+
+    .stats {
+      display: flex;
+      gap: 24px;
+      margin: 16px 0 24px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .stats strong {
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      padding-bottom: 20px;
+      margin-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    button {
+      font: inherit;
+      font-weight: 600;
+      font-size: 14px;
+      background: #fff;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 16px;
+      cursor: pointer;
+    }
+
+    button:hover { border-color: var(--primary); }
+    button:active { transform: scale(.98); }
+    button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+    #judgeButton, #resultRestart { background: var(--primary); color: white; border-color: var(--primary); }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 10px;
+    }
+
+    .question {
+      font-size: 1.15rem;
+      font-weight: 700;
+      line-height: 1.6;
+      margin: 4px 0 20px;
+    }
+
+    .feedback {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    .feedback.correct { color: var(--correct); }
+    .feedback.correctBack { color: var(--correctBack); }
+    .feedback.incorrect { color: var(--incorrect); }
+    .feedback.incorrectBack { color: var(--incorrectBack); }
+
+    .answers {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .answer-choice {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--text);
+      padding: 12px 14px;
+      display: flex;
+      gap: 10px;
+      text-align: left;
+      font: inherit;
+      font-size: 15px;
+      cursor: pointer;
+    }
+
+    .answer-choice:hover { border-color: var(--primary); }
+
+    .answer-choice .key { font-weight: 700; color: var(--muted); }
+
+    .answer-choice.selected {
+      border-color: var(--primary);
+      background: #dbeafe;
+    }
+
+    .answer-choice.correct {
+      border-color: var(--correct);
+      color: var(--correct);
+      background-color: var(--correctBack);
+    }
+
+    .answer-choice.incorrect {
+      border-color: var(--incorrect);
+      color: var(--incorrect);
+      background-color: var(--incorrectBack);
+    }
+
+    .answer-choice:disabled { cursor: default; }
+
+    .written-answer { display: grid; gap: 8px; font-size: 15px; }
+    .short-answer-input {
+      width: 100%;
+      min-width: 0;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--text);
+      font: inherit;
+      opacity: 1;
+    }
+    .short-answer-input.correct { border-color: var(--correct); color: var(--correct); background: var(--correctBack); }
+    .short-answer-input.incorrect { border-color: var(--incorrect); color: var(--incorrect); background: var(--incorrectBack); }
+
+    .cloze-question { white-space: pre-wrap; line-height: 1.9; font-size: 16px; overflow-wrap: anywhere; }
+    .cloze-input { display: inline-block; width: 12em; max-width: calc(100% - 8px); padding: 6px 10px; margin: 2px 4px; line-height: 1.5; vertical-align: baseline; }
+    .cloze-question img { max-width: 100%; height: auto; vertical-align: middle; }
+    #rightAnswer { white-space: pre-wrap; }
+
+    .judge-row {
+      margin-top: 12px;
+    }
+
+    .match-row {
+      display: grid;
+      grid-template-columns: 160px 1fr;
+      gap: 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-size: 15px;
+    }
+
+    .match-row.correct { border-color: var(--correct); color: var(--correct); background-color: var(--correctBack);}
+    .match-row.incorrect { border-color: var(--incorrect); color: var(--incorrect); background-color: var(--incorrectBack);}
+    .match-row .term { font-weight: 700; }
+
+    .match-row select {
+      font: inherit;
+      font-size: 15px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 10px;
+      background: #fff;
+      color: var(--text);
+    }
+
+    .note {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.7;
+      margin-top: 16px;
+    }
+
+    .results {
+      text-align: center;
+      padding: 40px 0;
+    }
+
+    .result-percent {
+      font-size: 56px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .result-detail {
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.8;
+      margin-bottom: 24px;
+      white-space: pre-line;
+    }
+
+    @media (max-width: 560px) {
+      .match-row { grid-template-columns: 1fr; }
+    }
+  
+    .panel { background: white; padding: 20px; border: 1px solid var(--border); border-radius: 16px; margin: 20px 0; }
+    .rounds { display: grid; grid-template-columns: repeat(auto-fit,minmax(190px,1fr)); gap: 12px; }
+    .round { text-align: left; line-height: 1.7; }
+    .round strong, .round small { display: block; }
+    .round small, .hint { color: var(--muted); }
+    .section-title { font-size: 17px; margin: 0 0 14px; }
+    .history-row { padding: 12px 0; border-bottom: 1px solid var(--border); line-height: 1.8; }
+    .history-row summary { cursor: pointer; }
+    #saveStatus { margin-top: 12px; white-space: pre-line; }
+    #storageNotice { line-height: 1.7; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <h1 id="folderName">出題</h1>
+    <div class="subtitle" id="folderInfo"></div>
+    <div id="storageNotice" class="hint" role="status"></div>
+    <section id="selection" class="panel">
+      <h2 class="section-title">受験する回を選ぶ</h2>
+      <p class="hint">各回の問題を元の順番で出題します。回答後に正解を表示します。</p>
+      <div id="rounds" class="rounds"></div>
+    </section>
+    <div id="exam" class="hidden">
+    <div class="stats">
+      <span>進捗 <strong id="progressCount">0 / 0</strong></span>
+      <span>正解 <strong id="correctCount">0</strong></span>
+      <span>スキップ <strong id="skippedCount">0</strong></span>
+    </div>
+
+    <div class="toolbar">
+      <button id="nextButton">スキップ</button>
+      <button id="restartButton">この回をやり直す</button>
+      <button id="backButton">回の選択へ</button>
+      <button id="exportHtmlButton">HTMLとして書き出し</button>
+    </div>
+
+    <div class="meta">
+      <span id="questionBadge">-</span>
+      <span id="questionProgress"></span>
+      <span id="questionSource"></span>
+    </div>
+    <div id="feedback" class="feedback"></div>
+    <h2 class="question" id="questionText">読み込み中…</h2>
+    <ol class="answers" id="answers"></ol>
+    <div class="judge-row hidden" id="judgeRow">
+      <button id="judgeButton">答え合わせ</button>
+    </div>
+    <div class="note hidden" id="rightAnswer"></div>
+
+    <div class="results hidden" id="results">
+      <div class="result-percent" id="resultPercent">0%</div>
+      <div class="result-detail" id="resultDetail"></div>
+      <button id="resultRestart">この回にもう一度挑戦する</button>
+      <p id="saveStatus" role="status"></p>
+    </div>
+    </div>
+    <section class="panel">
+      <h2 class="section-title">受験履歴</h2>
+      <p class="hint">完了した受験の日時・正解率・問題ごとの結果を、このブラウザに最大500件保存します。途中で終了した受験は記録されません。</p>
+      <button id="downloadHistory">履歴をJSONで保存</button>
+      <div id="history"></div>
+    </section>
+  </div>
+
+  <script>
+// 保存一覧・演習・単体HTMLで共通の問題形式と重複判定。
+(() => {
+  const clean = value => String(value ?? '').replace(/\s+/g, ' ').trim();
+  const types = new Set(['shortanswer', 'multichoice', 'truefalse', 'match', 'numerical', 'essay', 'multianswer', 'description', 'ordering', 'ddwtos', 'gapselect']);
+  const typeOf = question => {
+    for (const value of [question.type, ...(question.classes || [])]) {
+      const type = String(value || '').replace(/^qtype_/, '');
+      if (types.has(type)) return type;
+    }
+    return question.type || '';
+  };
+  const normalize = question => ({ ...question, type: typeOf(question) });
+  const isCloze = question => typeOf(question) === 'multianswer';
+  const blankAnswerText = answer => String(answer?.rightAnswer || (answer?.markedCorrect ? answer.text : '') || '').trim();
+  const identity = question => {
+    const type = typeOf(question);
+    const text = clean(question.questionText);
+    const images = (question.questionImages || []).map(image => image.src || '');
+    if (!text && !images.length) return null;
+    let choices = [];
+    if (isCloze(question)) {
+      choices = [
+        (question.questionParts || []).map(part => 'blank' in part ? ['blank', part.blank] : part.image ? ['image', part.image.src] : ['text', clean(part.text)]),
+        (question.answers || []).map(answer => [answer.kind || 'text', (answer.options || [])
+          .filter(option => option.value !== '').map(option => clean(option.text)).sort()]),
+      ];
+    } else if (type === 'match') {
+      choices = (question.answers || []).map(row => JSON.stringify([
+        clean(row.prompt), (row.options || []).filter(option => option.value !== '0' && option.value !== '')
+          .map(option => clean(option.text)).sort(),
+      ])).sort();
+    } else if (type !== 'shortanswer') {
+      choices = (question.answers || []).map(answer => clean(answer.text)).sort();
+    }
+    // 回答順、選択状態、受験時の正誤、レビューURLは問題そのものには含めない。
+    return JSON.stringify([type, text, images, choices]);
+  };
+  const answerQuality = question => isCloze(question)
+    ? (question.answers || []).filter(answer => blankAnswerText(answer)).length
+    : (clean(question.rightAnswer) ? 2 : 0)
+    + ((question.answers || []).some(answer => answer.markedCorrect || answer.selectedCorrectly) ? 1 : 0);
+  const buildPool = folder => {
+    const unique = new Map();
+    for (const quiz of folder.quizzes || []) {
+      for (const raw of quiz.questions || []) {
+        const question = { ...normalize(raw), sourceTitle: clean(quiz.title) };
+        const key = identity(question) ?? Symbol();
+        const previous = unique.get(key);
+        // 再取得した不完全なデータで、既存の正解を失わない。
+        const preferred = !previous || answerQuality(question) >= answerQuality(previous) ? question : previous;
+        if (previous && isCloze(preferred)) {
+          const other = preferred === question ? previous : question;
+          unique.set(key, { ...preferred, answers: (preferred.answers || []).map((answer, index) =>
+            blankAnswerText(answer) ? answer : { ...answer, rightAnswer: blankAnswerText(other.answers?.[index]) }) });
+        } else {
+          unique.set(key, preferred);
+        }
+      }
+    }
+    return [...unique.values()];
+  };
+  globalThis.MMQuiz = { typeOf, normalize, isCloze, blankAnswerText, identity, buildPool };
+})();
+
+</script>
+  <script>
+window.__EMBEDDED_QUIZ__ = {"name":"システム開発","quizzes":[{"generatedAt":"2026-11-06T14:48:55.769Z","grade":{"percent":92.86,"text":"9.29 / 10.00 (92.86%)"},"questionCount":5,"questions":[{"answers":[{"index":0,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"効率よく開発","text":"効率よく開発"},{"index":1,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"属人性","text":"属人性"},{"index":2,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"生産","text":"生産"}],"classes":["que","multianswer","deferredfeedback","correct"],"id":"question-947119-1","number":"1","questionParts":[{"text":"p.4を参考にソフトウェア工学が追及していることを記述してください。\n・良いソフトウェアを"},{"blank":0},{"text":"すること\n・"},{"blank":1},{"text":"の排除（同じ作業であれば、誰がやっても同じ作業効率で同じ結果が得られること）\n・"},{"blank":2},{"text":"の自動化（効率の高い生産）"}],"questionText":"p.4を参考にソフトウェア工学が追及していることを記述してください。\n・良いソフトウェアを[空欄 1]すること\n・[空欄 2]の排除（同じ作業であれば、誰がやっても同じ作業効率で同じ結果が得られること）\n・[空欄 3]の自動化（効率の高い生産）","rightAnswer":"","score":"3.00 / 3.00","state":"correct","type":"multianswer","unsupportedBlanks":false},{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"ソフトウェアの「開発」に関する工程を表したものだけをプロセスという"},{"disabled":true,"index":1,"label":"b.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"ソフトウェア開発のモデル化の手法は一つしかない"},{"disabled":true,"index":2,"label":"c.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"プロセスモデルとは製品を製造する際の各作業単位を時系列に配列したものである"},{"disabled":true,"index":3,"label":"d.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"プロセスモデルとはソフトウェア開発作業をプロセスとしてとらえてモデル化したものである"},{"disabled":true,"index":4,"label":"e.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"プロセスは「分析」「設計」「開発」などの作業単位をランダムに配列したものである"}],"classes":["que","multichoice","deferredfeedback","partiallycorrect"],"id":"question-947119-2","number":"2","questionText":"p.6を参考にプロセスモデルの説明について正しいものを選んでください","rightAnswer":"正解は次のとおりです: プロセスモデルとは製品を製造する際の各作業単位を時系列に配列したものである, プロセスモデルとはソフトウェア開発作業をプロセスとしてとらえてモデル化したものである","score":"0.50 / 1.00","state":"部分的に正解","type":"multichoice"},{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"大きな機能を単純な小さな機能の集合として扱う"},{"disabled":true,"index":1,"label":"b.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"構造化の手法はDFDやデータディクショナリから段階的に詳細化することもできる"},{"disabled":true,"index":2,"label":"c.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"世の中の全ての事柄は構造的に分割可能である"},{"disabled":true,"index":3,"label":"d.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"モジュール間で共有するデータがあり構造化が難しい場合がある"},{"disabled":true,"index":4,"label":"e.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"構造化しておけばあるモジュールを変更しても依存するモジュールを変更しなくて良い"}],"classes":["que","multichoice","deferredfeedback","correct"],"id":"question-947119-3","number":"3","questionText":"p.8～10を参考に構造化手法について記述が正しいものを選んでください","rightAnswer":"正解は次のとおりです: 大きな機能を単純な小さな機能の集合として扱う, 構造化の手法はDFDやデータディクショナリから段階的に詳細化することもできる, モジュール間で共有するデータがあり構造化が難しい場合がある","score":"1.00 / 1.00","state":"correct","type":"multichoice"},{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"データ中心アプローチには要求分析や基本設計は必要ない"},{"disabled":true,"index":1,"label":"b.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"データモデリングのためには、DFD(データフローダイアグラム)やUMLを利用する"},{"disabled":true,"index":2,"label":"c.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"システム化の対象となる「もの」に着目したアプローチである"},{"disabled":true,"index":3,"label":"d.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"データは良く変更されるが業務手続は変更されないことに注目したアプローチである"}],"classes":["que","multichoice","deferredfeedback","correct"],"id":"question-947119-4","number":"4","questionText":"p.12を参考にしデータ中心アプローチについて正しいものを１つ選んでください","rightAnswer":"正解: データモデリングのためには、DFD(データフローダイアグラム)やUMLを利用する","score":"1.00 / 1.00","state":"correct","type":"multichoice"},{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"オブジェクト指向では「もの」と「もの」の関係を具体化する"},{"disabled":true,"index":1,"label":"b.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"システム化対象の「機能」に注目したアプローチである"},{"disabled":true,"index":2,"label":"c.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"車、船、人間、コンピュータなど、様々なものを抽象化してオブジェクトとして定義可能である"},{"disabled":true,"index":3,"label":"d.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"オブジェクト指向は業務のデータはあまり変わらないことに注目したアプローチである"}],"classes":["que","multichoice","deferredfeedback","correct"],"id":"question-947119-5","number":"5","questionText":"p.13,14を参考にしてオブジェクト指向について正しいものを全て選んでください","rightAnswer":"正解は次のとおりです: オブジェクト指向では「もの」と「もの」の関係を具体化する, 車、船、人間、コンピュータなど、様々なものを抽象化してオブジェクトとして定義可能である","score":"1.00 / 1.00","state":"correct","type":"multichoice"}],"title":"理解度テスト1: 受験レビュー | HUS-Moodle","url":"https://moodle.hus.ac.jp/mod/quiz/review.php?attempt=939679&cmid=102862"},{"generatedAt":"2026-11-06T14:50:54.545Z","grade":{"percent":100,"text":"10.00 / 10.00 (100%)"},"questionCount":6,"questions":[{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"上流工程から下流工程に滝の水が流れ落ちていくように順番に開発する手法である"},{"disabled":true,"index":1,"label":"b.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"ある工程で誤りがあった場合には、任意の工程に後戻りできる"},{"disabled":true,"index":2,"label":"c.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"上位工程のミスが下位工程に影響をおよぼしにくい"},{"disabled":true,"index":3,"label":"d.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"設計、プログラミング、テスト、設計、プログラミング、テストのように繰り返しながら機能を拡張していくモデルである"}],"classes":["que","multichoice","deferredfeedback","correct"],"id":"question-947455-1","number":"1","questionText":"p.17を参考にしてウォーターフォールモデルについて正しいものを選びなさい","rightAnswer":"正解: 上流工程から下流工程に滝の水が流れ落ちていくように順番に開発する手法である","score":"1.00 / 1.00","state":"correct","type":"multichoice"},{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"システムの個々の機能についてプログラミング可能な段階まで設計する"},{"disabled":true,"index":1,"label":"b.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"システム開発の最後のプロセスである"},{"disabled":true,"index":2,"label":"c.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"アウトプットとして「システム化計画書」を作成する"},{"disabled":true,"index":3,"label":"d.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"ユーザの要求を正確にもれなく把握することが重要である"}],"classes":["que","multichoice","deferredfeedback","correct"],"id":"question-947455-2","number":"2","questionText":"p.20を参考にして基本計画の内容について正しい記述を全て選べ","rightAnswer":"正解は次のとおりです: ユーザの要求を正確にもれなく把握することが重要である, アウトプットとして「システム化計画書」を作成する","score":"1.00 / 1.00","state":"correct","type":"multichoice"},{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"この設計でプログラミングが可能になるまでの詳細な設計を作成する"},{"disabled":true,"index":1,"label":"b.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"画面間の繋がりやインタフェースがこの設計に含まれる"},{"disabled":true,"index":2,"label":"c.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"システムのユーザから見える部分についての設計である"},{"disabled":true,"index":3,"label":"d.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"外部設計のアウトプットはシステム化計画書である"},{"disabled":true,"index":4,"label":"e.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"この設計ではユーザの立場に立った画面設計や帳票の設計が必要である"}],"classes":["que","multichoice","deferredfeedback","correct"],"id":"question-947455-3","number":"3","questionText":"p.21,22を参考にして外部設計について正しいものを全て選べ","rightAnswer":"正解は次のとおりです: システムのユーザから見える部分についての設計である, 画面間の繋がりやインタフェースがこの設計に含まれる, この設計ではユーザの立場に立った画面設計や帳票の設計が必要である","score":"1.00 / 1.00","state":"correct","type":"multichoice"},{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"外部設計書にもとづき、プログラム内部のプログラム1行1行を設計する"},{"disabled":true,"index":1,"label":"b.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"内部設計では画面の見た目などインタフェースに特に気を配る必要がある"},{"disabled":true,"index":2,"label":"c.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"内部設計ではコンピュータやシステム開発側から見た設計を行う"},{"disabled":true,"index":3,"label":"d.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"内部設計において、構造化したり、システムをプログラム単位などの細かい単位に分割する"}],"classes":["que","multichoice","deferredfeedback","correct"],"id":"question-947455-4","number":"4","questionText":"p.23,24を参考にして内部設計で行う内容について正しい記述を全て選べ","rightAnswer":"正解は次のとおりです: 内部設計ではコンピュータやシステム開発側から見た設計を行う, 内部設計において、構造化したり、システムをプログラム単位などの細かい単位に分割する","score":"1.00 / 1.00","state":"correct","type":"multichoice"},{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"プログラミング完了時には全く不具合の無いプログラムの作成が求められる"},{"disabled":true,"index":1,"label":"b.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"プログラミングのプロセスで単体テストを行う場合もある"},{"disabled":true,"index":2,"label":"c.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"プログラミング作業のことを「コーディング」ともいう"},{"disabled":true,"index":3,"label":"d.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"プログラミングでは、文法エラーが発生している状態で次のフェーズに移行しても良い"}],"classes":["que","multichoice","deferredfeedback","correct"],"id":"question-947455-5","number":"5","questionText":"p.27を参考にしてプログラミングについて正しいもの全て選びなさい","rightAnswer":"正解は次のとおりです: プログラミング作業のことを「コーディング」ともいう, プログラミングのプロセスで単体テストを行う場合もある","score":"1.00 / 1.00","state":"correct","type":"multichoice"},{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"テストは必ず開発プロセスの最後に一括して実施する"},{"disabled":true,"index":1,"label":"b.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"テストは開発した機能が設計書に記載された仕様通りであるかをチェックするプロセスである"},{"disabled":true,"index":2,"label":"c.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"テストには、単体テストのほかに、結合テスト、総合テスト、運用テストなどがある"},{"disabled":true,"index":3,"label":"d.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"ウォーターフォールモデルではプログラムに誤りがあり、それが設計に依存する場合でも絶対に設計工程の成果物を修正してはいけない"}],"classes":["que","multichoice","deferredfeedback","correct"],"id":"question-947455-6","number":"6","questionText":"p.28,29を参考にしてテストについて正しい記述を全て選びなさい","rightAnswer":"正解は次のとおりです: テストは開発した機能が設計書に記載された仕様通りであるかをチェックするプロセスである, テストには、単体テストのほかに、結合テスト、総合テスト、運用テストなどがある","score":"1.00 / 1.00","state":"correct","type":"multichoice"}],"title":"理解度テスト2: 受験レビュー | HUS-Moodle","url":"https://moodle.hus.ac.jp/mod/quiz/review.php?attempt=940015&cmid=102863"},{"generatedAt":"2026-11-06T14:51:06.148Z","grade":{"percent":null,"text":""},"questionCount":7,"questions":[{"answers":[{"index":0,"options":[{"selected":false,"text":"プロトタイプモデル","value":"1"},{"selected":false,"text":"スパイラルモデル","value":"2"},{"selected":false,"text":"アジャイルモデル","value":"3"},{"selected":true,"text":"イテラティブモデル","value":"4"},{"selected":false,"text":"インクリメンタルモデル","value":"5"}],"prompt":"システム全体の要件定義を行い、必要な機能について設計、開発、テストを繰り返し、少しずつ肉付けしながら開発する手法","selected":"イテラティブモデル","selectedCorrectly":true,"selectedIncorrectly":false,"selectedValue":"4"},{"index":1,"options":[{"selected":false,"text":"プロトタイプモデル","value":"1"},{"selected":true,"text":"スパイラルモデル","value":"2"},{"selected":false,"text":"アジャイルモデル","value":"3"},{"selected":false,"text":"イテラティブモデル","value":"4"},{"selected":false,"text":"インクリメンタルモデル","value":"5"}],"prompt":"システムをサブシステムに分割し小さなウォーターフォールモデルで設計、開発、テスト、評価を繰り返しシステムを開発する手法","selected":"スパイラルモデル","selectedCorrectly":true,"selectedIncorrectly":false,"selectedValue":"2"},{"index":2,"options":[{"selected":true,"text":"プロトタイプモデル","value":"1"},{"selected":false,"text":"スパイラルモデル","value":"2"},{"selected":false,"text":"アジャイルモデル","value":"3"},{"selected":false,"text":"イテラティブモデル","value":"4"},{"selected":false,"text":"インクリメンタルモデル","value":"5"}],"prompt":"上流フェーズでユーザが確認可能な試作品を作成し、ユーザの要求を明確化する手法","selected":"プロトタイプモデル","selectedCorrectly":true,"selectedIncorrectly":false,"selectedValue":"1"},{"index":3,"options":[{"selected":false,"text":"プロトタイプモデル","value":"1"},{"selected":false,"text":"スパイラルモデル","value":"2"},{"selected":false,"text":"アジャイルモデル","value":"3"},{"selected":false,"text":"イテラティブモデル","value":"4"},{"selected":true,"text":"インクリメンタルモデル","value":"5"}],"prompt":"システム全体の要件定義を行い、モジュールごとに分割した各機能について並列的に設計、開発、テストを行い、機能を追加しつつリリースする手法","selected":"インクリメンタルモデル","selectedCorrectly":true,"selectedIncorrectly":false,"selectedValue":"5"},{"index":4,"options":[{"selected":false,"text":"プロトタイプモデル","value":"1"},{"selected":false,"text":"スパイラルモデル","value":"2"},{"selected":true,"text":"アジャイルモデル","value":"3"},{"selected":false,"text":"イテラティブモデル","value":"4"},{"selected":false,"text":"インクリメンタルモデル","value":"5"}],"prompt":"変更の多いソフトウェア開発においてソフトウェア開発の価値を高めるためにに、動作するソフトウェアや変化への対応に価値をおく様々な手法を総称したモデル","selected":"アジャイルモデル","selectedCorrectly":true,"selectedIncorrectly":false,"selectedValue":"3"}],"classes":["que","match","deferredfeedback","correct"],"id":"question-954599-1","number":"1","questionText":"p.5～p.12を参考にし開発モデルについて正しい組み合わせを選べ","rightAnswer":"正解: システム全体の要件定義を行い、必要な機能について設計、開発、テストを繰り返し、少しずつ肉付けしながら開発する手法 → イテラティブモデル, システムをサブシステムに分割し小さなウォーターフォールモデルで設計、開発、テスト、評価を繰り返しシステムを開発する手法 → スパイラルモデル, 上流フェーズでユーザが確認可能な試作品を作成し、ユーザの要求を明確化する手法 → プロトタイプモデル, システム全体の要件定義を行い、モジュールごとに分割した各機能について並列的に設計、開発、テストを行い、機能を追加しつつリリースする手法 → インクリメンタルモデル, 変更の多いソフトウェア開発においてソフトウェア開発の価値を高めるためにに、動作するソフトウェアや変化への対応に価値をおく様々な手法を総称したモデル → アジャイルモデル","score":"","state":"correct","type":"match"},{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"早期にユーザの要求を明確にできる"},{"disabled":true,"index":1,"label":"b.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"設計者が思いつかない指摘があることにより品質が低下し、コストも増えることがある"},{"disabled":true,"index":2,"label":"c.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"プロトタイプの一部を利用する積み上げ型と、破棄する使い捨て型がある"},{"disabled":true,"index":3,"label":"d.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"上流工程はウォーターフォールであり、下流工程でプロトタイプを作成する"}],"classes":["que","multichoice","deferredfeedback","correct"],"id":"question-954599-2","number":"2","questionText":"p.6を参考にし、プロトタイプモデルについての記述のうち正しいものを選べ","rightAnswer":"正解は次のとおりです: 早期にユーザの要求を明確にできる, プロトタイプの一部を利用する積み上げ型と、破棄する使い捨て型がある","score":"","state":"correct","type":"multichoice"},{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"早い段階で動作するシステムが作成可能であるためフィードバックを得やすい"},{"disabled":true,"index":1,"label":"b.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"最初に全てを設計しスパイラル的に全体的に機能を肉付けする形でシステムを開発していく"},{"disabled":true,"index":2,"label":"c.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"プロトタイプを作成するため、要求を明確にしやすい"},{"disabled":true,"index":3,"label":"d.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"小さなウォーターフォールモデルを繰り返すためスケジュールの管理が容易である"},{"disabled":true,"index":4,"label":"e.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"システムをいくつかのサブシステムに分割し、それぞれに対して小さなウォーターフォールモデルを繰り返す"}],"classes":["que","multichoice","deferredfeedback","correct"],"id":"question-954599-3","number":"3","questionText":"p.9を参考にし、スパイラルモデルについて正しい記述を選べ","rightAnswer":"正解は次のとおりです: システムをいくつかのサブシステムに分割し、それぞれに対して小さなウォーターフォールモデルを繰り返す, 早い段階で動作するシステムが作成可能であるためフィードバックを得やすい","score":"","state":"correct","type":"multichoice"},{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"小さいウォーターフォルモデルを繰り返すモデルである"},{"disabled":true,"index":1,"label":"b.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"反復型モデルと呼ばれる"},{"disabled":true,"index":2,"label":"c.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"漸増型モデルと呼ばれる"},{"disabled":true,"index":3,"label":"d.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"モジュールごとに分割した機能を並列的に開発し、機能を追加しつつリリースする"},{"disabled":true,"index":4,"label":"e.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"全体的に薄く作成していき動作可能なシステムを作成する"}],"classes":["que","multichoice","deferredfeedback","correct"],"id":"question-954599-4","number":"4","questionText":"p.10を参考にし、インクリメンタルモデルについて正しい記述を選べ","rightAnswer":"正解は次のとおりです: 漸増型モデルと呼ばれる, モジュールごとに分割した機能を並列的に開発し、機能を追加しつつリリースする","score":"","state":"correct","type":"multichoice"},{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"イテレーションモデルとも呼ばれている"},{"disabled":true,"index":1,"label":"b.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"反復型モデルと呼ばれる"},{"disabled":true,"index":2,"label":"c.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"機能をモジュールごとに分割し機能を追加しつつリリースしていくモデルである"},{"disabled":true,"index":3,"label":"d.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"アジャイルに含まれるモデルである"},{"disabled":true,"index":4,"label":"e.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"システム全体について要件定義と設計を行い少しずつ薄く開発とテストを行い肉付けしていくモデルである"}],"classes":["que","multichoice","deferredfeedback","correct"],"id":"question-954599-5","number":"5","questionText":"p.10を参考にし、イテラティブモデルについて正しい記述を選べ","rightAnswer":"正解は次のとおりです: 反復型モデルと呼ばれる, システム全体について要件定義と設計を行い少しずつ薄く開発とテストを行い肉付けしていくモデルである, イテレーションモデルとも呼ばれている","score":"","state":"correct","type":"multichoice"},{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"アジャイル開発はスクラム開発のみことを指す"},{"disabled":true,"index":1,"label":"b.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"アジャイル開発ではドキュメントは作成しなくて良い"},{"disabled":true,"index":2,"label":"c.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"アジャイル開発では動くソフトウェアの開発に価値をおいている"},{"disabled":true,"index":3,"label":"d.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"アジャイルのスクラムではスプリントと呼ばれる小さく区切った期間ごとに開発する"},{"disabled":true,"index":4,"label":"e.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"スクラム開発では常に動作する製品を開発する"}],"classes":["que","multichoice","deferredfeedback","correct"],"id":"question-954599-6","number":"6","questionText":"p.11、12を参考にし、アジャイルモデルについて正しい記述を選べ","rightAnswer":"正解は次のとおりです: アジャイル開発では動くソフトウェアの開発に価値をおいている, アジャイルのスクラムではスプリントと呼ばれる小さく区切った期間ごとに開発する, スクラム開発では常に動作する製品を開発する","score":"","state":"correct","type":"multichoice"},{"answers":[{"index":0,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"プロトタイプ","text":"プロトタイプ"},{"index":1,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"プロトタイプモデル","text":"プロトタイプモデル"},{"index":2,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"インクリメンタルモデル","text":"インクリメンタルモデル"},{"index":3,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"イテラティブモデル","text":"イテラティブモデル"}],"classes":["que","multianswer","deferredfeedback","correct"],"id":"question-954599-7","number":"7","questionParts":[{"text":"様々プロセスモデルについて穴埋めしなさい\n・初期工程で全ての要求条件を洗い出すことは難しく、ユーザ要求を早期に確認するための"},{"blank":0},{"text":"（試作品）を作成する"},{"blank":1},{"text":"がある\n・ユーザの要求変更に対応しにくいことから、開発を小分けにして開発するスパイラルモデル、"},{"blank":2},{"text":"、アジャイルモデルなどがある\n・また、繰り返し見直しを行う"},{"blank":3},{"text":"（イテレーションモデル）がある"}],"questionText":"様々プロセスモデルについて穴埋めしなさい\n・初期工程で全ての要求条件を洗い出すことは難しく、ユーザ要求を早期に確認するための[空欄 1]（試作品）を作成する[空欄 2]がある\n・ユーザの要求変更に対応しにくいことから、開発を小分けにして開発するスパイラルモデル、[空欄 3]、アジャイルモデルなどがある\n・また、繰り返し見直しを行う[空欄 4]（イテレーションモデル）がある","rightAnswer":"","score":"","state":"correct","type":"multianswer","unsupportedBlanks":false}],"title":"理解度テスト３: 受験レビュー | HUS-Moodle","url":"https://moodle.hus.ac.jp/mod/quiz/review.php?attempt=947050&cmid=102866"},{"generatedAt":"2026-11-06T14:51:17.280Z","grade":{"percent":null,"text":""},"questionCount":7,"questions":[{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"基本計画ではあくまでも計画なので実現可能性は考慮しない"},{"disabled":true,"index":1,"label":"b.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"基本計画はユーザの要求を正確に漏れなく把握するプロセスである"},{"disabled":true,"index":2,"label":"c.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"ユーザの要求に漏れがあってものちのプロセスには大きな影響は与えない"},{"disabled":true,"index":3,"label":"d.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"システム化計画では現状を分析し解決方法を立案する"},{"disabled":true,"index":4,"label":"e.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"要件定義ではシステムの機能要件、非機能要件を定義する"}],"classes":["que","multichoice","deferredfeedback","correct"],"id":"question-954861-1","number":"1","questionText":"p.14を参考にし、基本計画について正しい記述を選べ","rightAnswer":"正解は次のとおりです: 基本計画はユーザの要求を正確に漏れなく把握するプロセスである, 要件定義ではシステムの機能要件、非機能要件を定義する, システム化計画では現状を分析し解決方法を立案する","score":"","state":"correct","type":"multichoice"},{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"要件定義はビジネスやシステムの課題を明らかにすることである"},{"disabled":true,"index":1,"label":"b.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"要件定義は要求をシステム仕様に再定義したものである"},{"disabled":true,"index":2,"label":"c.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"要件定義ではシステムとして実現する機能を整理しシステム化の範囲を特定する"},{"disabled":true,"index":3,"label":"d.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"要求定義はその名の通り顧客の要求（ビジネス、システムの課題など）を明らかにすることである"},{"disabled":true,"index":4,"label":"e.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"要求定義はビジネスの課題を明らかにし、システム仕様に落とし込んだものである"}],"classes":["que","multichoice","deferredfeedback","correct"],"id":"question-954861-2","number":"2","questionText":"p.16～p.18を参考にし、要求定義と要件定義について正しい記述を選べ","rightAnswer":"正解は次のとおりです: 要求定義はその名の通り顧客の要求（ビジネス、システムの課題など）を明らかにすることである, 要件定義は要求をシステム仕様に再定義したものである, 要件定義ではシステムとして実現する機能を整理しシステム化の範囲を特定する","score":"","state":"correct","type":"multichoice"},{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"ボトムアップ・アプローチは最初に目標を定め、実現手段をシステムとしてまとめていく手法である"},{"disabled":true,"index":1,"label":"b.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"ボトムアップ・アプローチは現状の問題点から改善案を考えシステムとしてまとめていく手法である"},{"disabled":true,"index":2,"label":"c.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"トップダウン・アプローチは現状の問題点から改善案を考えシステムとしてまとめていく手法である"},{"disabled":true,"index":3,"label":"d.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"トップダウン・アプローチは最初に目標を定め、実現手段をシステムとしてまとめていく手法である"}],"classes":["que","multichoice","deferredfeedback","correct"],"id":"question-954861-3","number":"3","questionText":"p.19～p.21を参考にし、要件定義のアプローチについて正しい記述を選べ","rightAnswer":"正解は次のとおりです: トップダウン・アプローチは最初に目標を定め、実現手段をシステムとしてまとめていく手法である, ボトムアップ・アプローチは現状の問題点から改善案を考えシステムとしてまとめていく手法である","score":"","state":"correct","type":"multichoice"},{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"不正アクセスの防止のためにアプリから送信されるテキストから制御文字を抜く機能をつける"},{"disabled":true,"index":1,"label":"b.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"ショッピングアプリのカートに商品を追加する際の処理"},{"disabled":true,"index":2,"label":"c.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"画面のボタンやテキストボックスの大きさ"},{"disabled":true,"index":3,"label":"d.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"機能が追加しやすいように各部品をモジュール化して開発する"},{"disabled":true,"index":4,"label":"e.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"１年間での稼働率が99%以上であること"},{"disabled":true,"index":5,"label":"f.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"データベースに保持する業務データの種類"},{"disabled":true,"index":6,"label":"g.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"印刷物の印字する内容"},{"disabled":true,"index":7,"label":"h.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"地図アプリの地図の表示までの時間"}],"classes":["que","multichoice","deferredfeedback","partiallycorrect"],"id":"question-954861-4","number":"4","questionText":"p.22～p.29を参考にし機能要件と非機能要件のうち、機能要件に関するものを選べ","rightAnswer":"正解は次のとおりです: 画面のボタンやテキストボックスの大きさ, データベースに保持する業務データの種類, 印刷物の印字する内容, ショッピングアプリのカートに商品を追加する際の処理","score":"","state":"部分的に正解","type":"multichoice"},{"answers":[{"index":0,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"重複","text":"重複"},{"index":1,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"不足","text":"不足"},{"index":2,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"範囲","text":"範囲"}],"classes":["que","multianswer","deferredfeedback","correct"],"id":"question-954861-5","number":"5","questionParts":[{"text":"p.17を参考にし、要件定義書の作成について穴埋めしなさい\n・要件定義は要求定義書から"},{"blank":0},{"text":"を除去し、"},{"blank":1},{"text":"を追加し、また、矛盾を解決して実現する機能や条件を整理する。さらにシステム化する"},{"blank":2},{"text":"を特定する"}],"questionText":"p.17を参考にし、要件定義書の作成について穴埋めしなさい\n・要件定義は要求定義書から[空欄 1]を除去し、[空欄 2]を追加し、また、矛盾を解決して実現する機能や条件を整理する。さらにシステム化する[空欄 3]を特定する","rightAnswer":"","score":"","state":"correct","type":"multianswer","unsupportedBlanks":false},{"answers":[{"index":0,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"分析","text":"分析"},{"index":1,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"インタビュー","text":"インタビュー"},{"index":2,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"要求","text":"要求"}],"classes":["que","multianswer","deferredfeedback","correct"],"id":"question-954861-6","number":"6","questionParts":[{"text":"p.17を参考にし、要求定義書の作成について穴埋めしなさい\n・要求定義では顧客の業務の"},{"blank":0},{"text":"、ヒアリング"},{"blank":1},{"text":"などを通じて顧客が持つ"},{"blank":2},{"text":"を引き出し、文書としてまとめたものである"}],"questionText":"p.17を参考にし、要求定義書の作成について穴埋めしなさい\n・要求定義では顧客の業務の[空欄 1]、ヒアリング[空欄 2]などを通じて顧客が持つ[空欄 3]を引き出し、文書としてまとめたものである","rightAnswer":"","score":"","state":"correct","type":"multianswer","unsupportedBlanks":false},{"answers":[{"index":0,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"情報収集","text":"情報収集"},{"index":1,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"表現","text":"表現"},{"index":2,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"優先順位","text":"優先順位"},{"index":3,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"取捨選択","text":"取捨選択"},{"index":4,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"モデル図法","text":"モデル図法"}],"classes":["que","multianswer","deferredfeedback","correct"],"id":"question-954861-7","number":"7","questionParts":[{"text":"p.18を参考にし、要求定義と要件定義のための作業について穴埋めせよ\n・要求定義から要件定義を行う際には、①"},{"blank":0},{"text":"、②整理・分析、③"},{"blank":1},{"text":"を相互に繰り返しながら進めていく\n・整理・分析では内容の整合性を確認し、"},{"blank":2},{"text":"をつけ、さらに何をシステム化するか"},{"blank":3},{"text":"する\n・表現では文章だけではなく、"},{"blank":4},{"text":"を活用して網羅性の確認や曖昧さを抑制する"}],"questionText":"p.18を参考にし、要求定義と要件定義のための作業について穴埋めせよ\n・要求定義から要件定義を行う際には、①[空欄 1]、②整理・分析、③[空欄 2]を相互に繰り返しながら進めていく\n・整理・分析では内容の整合性を確認し、[空欄 3]をつけ、さらに何をシステム化するか[空欄 4]する\n・表現では文章だけではなく、[空欄 5]を活用して網羅性の確認や曖昧さを抑制する","rightAnswer":"","score":"","state":"correct","type":"multianswer","unsupportedBlanks":false}],"title":"理解度テスト４: 受験レビュー | HUS-Moodle","url":"https://moodle.hus.ac.jp/mod/quiz/review.php?attempt=947312&cmid=102867"},{"generatedAt":"2026-11-06T14:51:29.977Z","grade":{"percent":null,"text":""},"questionCount":6,"questions":[{"answers":[{"index":0,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"事象","text":"事象"},{"index":1,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"単純化","text":"単純化"},{"index":2,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"抽象化","text":"抽象化"}],"classes":["que","multianswer","deferredfeedback","correct"],"id":"question-960489-1","number":"1","questionParts":[{"text":"p.5を参考にし、モデルとモデリングについて穴埋めしなさい\n・モデルとは、対象とする"},{"blank":0},{"text":"から、問題を解くために必要なものだけ取り出して"},{"blank":1},{"text":"、"},{"blank":2},{"text":"したものである"}],"questionText":"p.5を参考にし、モデルとモデリングについて穴埋めしなさい\n・モデルとは、対象とする[空欄 1]から、問題を解くために必要なものだけ取り出して[空欄 2]、[空欄 3]したものである","rightAnswer":"","score":"","state":"correct","type":"multianswer","unsupportedBlanks":false},{"answers":[{"index":0,"options":[{"selected":true,"text":"データフローダイヤグラム","value":"1"},{"selected":false,"text":"状態遷移図","value":"2"},{"selected":false,"text":"UML","value":"3"},{"selected":false,"text":"E-R図（ERD）","value":"4"}],"prompt":"データの流れに着目して業務を図式表現する手法。データがどこからどこへ流れていくかを図解したもの","selected":"データフローダイヤグラム","selectedCorrectly":true,"selectedIncorrectly":false,"selectedValue":"1"},{"index":1,"options":[{"selected":false,"text":"データフローダイヤグラム","value":"1"},{"selected":false,"text":"状態遷移図","value":"2"},{"selected":false,"text":"UML","value":"3"},{"selected":true,"text":"E-R図（ERD）","value":"4"}],"prompt":"モデル化する対象を実態と実態間の関連として図的に表現する手法","selected":"E-R図（ERD）","selectedCorrectly":true,"selectedIncorrectly":false,"selectedValue":"4"},{"index":2,"options":[{"selected":false,"text":"データフローダイヤグラム","value":"1"},{"selected":false,"text":"状態遷移図","value":"2"},{"selected":true,"text":"UML","value":"3"},{"selected":false,"text":"E-R図（ERD）","value":"4"}],"prompt":"モデル化する対象を属性と振る舞いを持つ「もの」としてとして扱うオブジェクト指向開発における統一モデリング言語","selected":"UML","selectedCorrectly":true,"selectedIncorrectly":false,"selectedValue":"3"},{"index":3,"options":[{"selected":false,"text":"データフローダイヤグラム","value":"1"},{"selected":true,"text":"状態遷移図","value":"2"},{"selected":false,"text":"UML","value":"3"},{"selected":false,"text":"E-R図（ERD）","value":"4"}],"prompt":"時間や行動などに応じて状態が変化する状況を図式化する手法","selected":"状態遷移図","selectedCorrectly":true,"selectedIncorrectly":false,"selectedValue":"2"}],"classes":["que","match","deferredfeedback","correct"],"id":"question-960489-2","number":"2","questionText":"p.7を参考にし、代表的なモデル図法について正しい組み合わせを選べ","rightAnswer":"正解: データの流れに着目して業務を図式表現する手法。データがどこからどこへ流れていくかを図解したもの → データフローダイヤグラム, モデル化する対象を実態と実態間の関連として図的に表現する手法 → E-R図（ERD）, モデル化する対象を属性と振る舞いを持つ「もの」としてとして扱うオブジェクト指向開発における統一モデリング言語 → UML, 時間や行動などに応じて状態が変化する状況を図式化する手法 → 状態遷移図","score":"","state":"correct","type":"match"},{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"矢印には状態を記載し、円の中にイベント（時間・行動）を記載する"},{"disabled":true,"index":1,"label":"b.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"時間や行動に応じて状況が変化する状況を図式化する"},{"disabled":true,"index":2,"label":"c.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"イベントが発生すると状態が変化し、それを矢印で次の状態を指し示す"},{"disabled":true,"index":3,"label":"d.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"システムに複数の状態がある場合はそのうちの一部分のみ書けば良い"},{"disabled":true,"index":4,"label":"e.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"状態が変化しない場合は自分自身を指し示すことができる"},{"disabled":true,"index":5,"label":"f.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"データの流れに着目した図法である"}],"classes":["que","multichoice","deferredfeedback","correct"],"id":"question-960489-3","number":"3","questionText":"p.10を参考にし、状態遷移図に関する記述について正しい説明を選べ","rightAnswer":"正解は次のとおりです: 時間や行動に応じて状況が変化する状況を図式化する, イベントが発生すると状態が変化し、それを矢印で次の状態を指し示す, 状態が変化しない場合は自分自身を指し示すことができる","score":"","state":"correct","type":"multichoice"},{"answers":[{"index":0,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"表形式","text":"表形式"},{"index":1,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"状態遷移図","text":"状態遷移図"}],"classes":["que","multianswer","deferredfeedback","correct"],"id":"question-960489-4","number":"4","questionParts":[{"text":"p.11を参考にし、状態遷移表について穴埋めしなさい\n・状態遷移表とは状態が変換する状況を"},{"blank":0},{"text":"で表したものである\n・"},{"blank":1},{"text":"と組み合わせ使用すると効果的である"}],"questionText":"p.11を参考にし、状態遷移表について穴埋めしなさい\n・状態遷移表とは状態が変換する状況を[空欄 1]で表したものである\n・[空欄 2]と組み合わせ使用すると効果的である","rightAnswer":"","score":"","state":"correct","type":"multianswer","unsupportedBlanks":false},{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"停止中に一時停止ボタンを押すと一時停止できる"},{"disabled":true,"index":1,"label":"b.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"一時停止中にSTOPボタンを押すことで停止できる"},{"disabled":true,"index":2,"label":"c.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"一時停止中にPAUSEボタンを押すことで再生できる"},{"disabled":true,"index":3,"label":"d.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"再生中にPLAYボタンを押すことで一時停止できる"},{"disabled":true,"index":4,"label":"e.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"停止中にSTOPボタンを押しても状態は変化しない"},{"disabled":true,"index":5,"label":"f.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"再生中にPAUSEボタンを押すことで一時停止できる"}],"classes":["que","multichoice","deferredfeedback","correct"],"id":"question-960489-5","number":"5","questionImages":[{"alt":"","src":"https://moodle.hus.ac.jp/pluginfile.php/119750/question/questiontext/960489/5/4536924/CD%E7%8A%B6%E6%85%8B%E9%81%B7%E7%A7%BB%E5%9B%B3.PNG"}],"questionText":"以下のCDプレイヤーの状態遷移図を読み、正しい記述を選べ","rightAnswer":"正解は次のとおりです: 一時停止中にSTOPボタンを押すことで停止できる, 再生中にPAUSEボタンを押すことで一時停止できる, 停止中にSTOPボタンを押しても状態は変化しない","score":"","state":"correct","type":"multichoice"},{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"沸騰中から沸点到達に遷移するとその後カルキ抜きをする"},{"disabled":true,"index":1,"label":"b.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"沸騰中にカルキ抜き完了になることは無い"},{"disabled":true,"index":2,"label":"c.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"保温中にカルキ抜き完了になることがある"},{"disabled":true,"index":3,"label":"d.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"カルキ抜き中に温度が下がると沸騰中になる"},{"disabled":true,"index":4,"label":"e.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"保温中に沸騰要求が発生すると沸騰中になる"},{"disabled":true,"index":5,"label":"f.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"保温中にカルキ抜きボタンをおすことでカルキ抜きできる"}],"classes":["que","multichoice","deferredfeedback","correct"],"id":"question-960489-6","number":"6","questionText":"電気ポットの状態遷移図（p.15）と状態遷移表（p.16）を読み、正しい記述を選べ","rightAnswer":"正解は次のとおりです: 沸騰中から沸点到達に遷移するとその後カルキ抜きをする, 保温中に沸騰要求が発生すると沸騰中になる, 沸騰中にカルキ抜き完了になることは無い","score":"","state":"correct","type":"multichoice"}],"title":"理解度テスト５: 受験レビュー | HUS-Moodle","url":"https://moodle.hus.ac.jp/mod/quiz/review.php?attempt=952824&cmid=102870"},{"generatedAt":"2026-11-06T14:51:47.745Z","grade":{"percent":null,"text":""},"questionCount":5,"questions":[{"answers":[{"index":0,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"物理モデル","text":"物理モデル"},{"index":1,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"可視化","text":"可視化"},{"index":2,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"どこへ格納されるのか","text":"どこへ格納されるのか"}],"classes":["que","multianswer","deferredfeedback","correct"],"id":"question-960694-1","number":"1","questionParts":[{"text":"データの可視化についてp.24を参考にして穴埋めしなさい\n・DFDは実業務（"},{"blank":0},{"text":"）のデータの流れを"},{"blank":1},{"text":"（論理モデル化）する\n・「データがどこから来てどこへ行くのか」、「"},{"blank":2},{"text":"」を表す"}],"questionText":"データの可視化についてp.24を参考にして穴埋めしなさい\n・DFDは実業務（[空欄 1]）のデータの流れを[空欄 2]（論理モデル化）する\n・「データがどこから来てどこへ行くのか」、「[空欄 3]」を表す","rightAnswer":"","score":"","state":"correct","type":"multianswer","unsupportedBlanks":false},{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"時間的な順序を記述することができる"},{"disabled":true,"index":1,"label":"b.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"条件分岐、繰り返しをわかりやすく記載可能である"},{"disabled":true,"index":2,"label":"c.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"DFDはデータの流れを表す"},{"disabled":true,"index":3,"label":"d.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"DFDはレベルをつけ構造化して記載可能である"}],"classes":["que","multichoice","deferredfeedback","correct"],"id":"question-960694-2","number":"2","questionText":"p.27を参考にし、DFDの基本モデルについて正しい記述を選べ","rightAnswer":"正解は次のとおりです: DFDはデータの流れを表す, DFDはレベルをつけ構造化して記載可能である","score":"","state":"correct","type":"multichoice"},{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"データストアから外に出る矢印は読み込みである"},{"disabled":true,"index":1,"label":"b.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"データストアに向かう矢印と出る矢印がある場合は、読み書きがあることを表す"},{"disabled":true,"index":2,"label":"c.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"プロセス名の右上に「if」と書くことで条件分岐できる"},{"disabled":true,"index":3,"label":"d.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"状態の遷移を中心に記載する図法である"},{"disabled":true,"index":4,"label":"e.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"なんらかのデータは廃棄（リジェクト）する場合はそれを矢印で明確に記載する"},{"disabled":true,"index":5,"label":"f.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"円の中にはプロセスを書き、＝のような記号の中にはデータストアを書く"}],"classes":["que","multichoice","deferredfeedback","correct"],"id":"question-960694-3","number":"3","questionText":"p.29を参考にし、DFDの書き方について正しい記述を選べ","rightAnswer":"正解は次のとおりです: データストアから外に出る矢印は読み込みである, データストアに向かう矢印と出る矢印がある場合は、読み書きがあることを表す, 円の中にはプロセスを書き、＝のような記号の中にはデータストアを書く","score":"","state":"correct","type":"multichoice"},{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"取引先が受け取るデータには注文データが含まれる"},{"disabled":true,"index":1,"label":"b.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"出荷処理では必ず最初に売上マスタに出荷データが格納される"},{"disabled":true,"index":2,"label":"c.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"受注処理は在庫マスタに読み書きする"},{"disabled":true,"index":3,"label":"d.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"受注処理から出荷処理に「出荷データ」が送られる"},{"disabled":true,"index":4,"label":"e.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"受注処理では商品マスタに書き込みを行う"},{"disabled":true,"index":5,"label":"f.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"出荷処理では取引先に納品書データを送り、そして、売掛処理に出荷報告書を送り、さらに売上マスタに出荷データを格納する"}],"classes":["que","multichoice","deferredfeedback","correct"],"id":"question-960694-4","number":"4","questionImages":[{"alt":"","src":"https://moodle.hus.ac.jp/pluginfile.php/119750/question/questiontext/960694/4/4536932/DFD1.PNG"}],"questionText":"以下のDFDを読み、正しい記述を選べ","rightAnswer":"正解は次のとおりです: 受注処理から出荷処理に「出荷データ」が送られる, 受注処理は在庫マスタに読み書きする, 出荷処理では取引先に納品書データを送り、そして、売掛処理に出荷報告書を送り、さらに売上マスタに出荷データを格納する","score":"","state":"correct","type":"multichoice"},{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"「利用者IDを検証する」で入力した利用者IDでユーザ管理情報を検索する"},{"disabled":true,"index":1,"label":"b.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"データストア「書籍詳細情報」はキーワードに該当する書籍情報の読み込みと、借りると選択した本の情報の更新に使われている"},{"disabled":true,"index":2,"label":"c.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"ユーザは利用者IDを入力せずにこのシステムを利用可能である"},{"disabled":true,"index":3,"label":"d.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"データストア「ユーザ管理情報」は利用者がログアウトすると削除される"}],"classes":["que","multichoice","deferredfeedback","correct"],"id":"question-960694-5","number":"5","questionText":"p.31図書貸出処理を読み、「この図から読み取れること」を選べ","rightAnswer":"正解は次のとおりです: 「利用者IDを検証する」で入力した利用者IDでユーザ管理情報を検索する, データストア「書籍詳細情報」はキーワードに該当する書籍情報の読み込みと、借りると選択した本の情報の更新に使われている","score":"","state":"correct","type":"multichoice"}],"title":"理解度テスト６: 受験レビュー | HUS-Moodle","url":"https://moodle.hus.ac.jp/mod/quiz/review.php?attempt=953029&cmid=102871"},{"generatedAt":"2026-11-06T14:52:15.428Z","grade":{"percent":null,"text":""},"questionCount":7,"questions":[{"answers":[{"index":0,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"見える","text":"見える"},{"index":1,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"ヒューマンインタフェース","text":"ヒューマンインタフェース"},{"index":2,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"サブシステムに分割","text":"サブシステムに分割"}],"classes":["que","multianswer","deferredfeedback","correct"],"id":"question-967726-1","number":"1","questionParts":[{"text":"外部設計についてp.4を参考にして穴埋めしなさい\n・外部設計では、ユーザから"},{"blank":0},{"text":"部分すなわち"},{"blank":1},{"text":"（画面設計）や他のシステムとのインタフェースを設計する\n・ある程度以上のシステムでは、開発を効率的に行うために、機能別に"},{"blank":2},{"text":"し、その機能の概要を定義する"}],"questionText":"外部設計についてp.4を参考にして穴埋めしなさい\n・外部設計では、ユーザから[空欄 1]部分すなわち[空欄 2]（画面設計）や他のシステムとのインタフェースを設計する\n・ある程度以上のシステムでは、開発を効率的に行うために、機能別に[空欄 3]し、その機能の概要を定義する","rightAnswer":"","score":"","state":"correct","type":"multianswer","unsupportedBlanks":false},{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"画面設計の標準化で順規するルールにはPMBOKがある"},{"disabled":true,"index":1,"label":"b.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"画面設計の標準化は近年開発ツールが高性能になり不要になりつつある"},{"disabled":true,"index":2,"label":"c.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"画面設計の標準化で準拠するルールにはJISやISOがある"},{"disabled":true,"index":3,"label":"d.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"画面設計の標準化で準拠するルールにはガイドラインがある"},{"disabled":true,"index":4,"label":"e.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"画面設計の標準化では予め画面をどのようなルールに順規して開発するかを決定する"}],"classes":["que","multichoice","deferredfeedback","correct"],"id":"question-967726-2","number":"2","questionText":"p.7を参考にし、画面設計の標準化手法について正しい記述を選べ","rightAnswer":"正解は次のとおりです: 画面設計の標準化では予め画面をどのようなルールに順規して開発するかを決定する, 画面設計の標準化で準拠するルールにはJISやISOがある, 画面設計の標準化で準拠するルールにはガイドラインがある","score":"","state":"correct","type":"multichoice"},{"answers":[{"index":0,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"ユーザ側","text":"ユーザ側"},{"index":1,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"人間中心設計","text":"人間中心設計"},{"index":2,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"ユーザビリティ","text":"ユーザビリティ"}],"classes":["que","multianswer","deferredfeedback","correct"],"id":"question-967726-3","number":"3","questionParts":[{"text":"p.10を参考にし、人間中心設計について適切な語句を埋めなさい\n・画面レイアウトや画面構成要素の設計は開発側の都合ではなく、"},{"blank":0},{"text":"の都合に合わせ、使えるように設計することである\n・ユーザの立場になってインタフェースを設計する考え方を"},{"blank":1},{"text":"（user-centered system design）と呼ぶ\n・システムの使いやすさのことを"},{"blank":2},{"text":"と呼び、仕事の効率や品質の評価に直結する"}],"questionText":"p.10を参考にし、人間中心設計について適切な語句を埋めなさい\n・画面レイアウトや画面構成要素の設計は開発側の都合ではなく、[空欄 1]の都合に合わせ、使えるように設計することである\n・ユーザの立場になってインタフェースを設計する考え方を[空欄 2]（user-centered system design）と呼ぶ\n・システムの使いやすさのことを[空欄 3]と呼び、仕事の効率や品質の評価に直結する","rightAnswer":"","score":"","state":"correct","type":"multianswer","unsupportedBlanks":false},{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"CUIはボタンやテキストボックスなどを使って直感的に操作可能である"},{"disabled":true,"index":1,"label":"b.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"GUIとCUIでは一般的にGUIの方が人間中心設計になっている"},{"disabled":true,"index":2,"label":"c.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"GUIはアイコンやメニュー、ボタンなどをマウスで操作することができる"},{"disabled":true,"index":3,"label":"d.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"CUIはコマンドプロンプトを代表するようなテキストベースのユーザインタフェースである"},{"disabled":true,"index":4,"label":"e.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"GUIは効率化の観点からバッチファイルやシェルスクリプトなどテキストベースでの処理に向いている"}],"classes":["que","multichoice","deferredfeedback","correct"],"id":"question-967726-4","number":"4","questionText":"p.10を参考にし、CUIとGUIについて正しい記述を選べ","rightAnswer":"正解は次のとおりです: CUIはコマンドプロンプトを代表するようなテキストベースのユーザインタフェースである, GUIはアイコンやメニュー、ボタンなどをマウスで操作することができる, GUIとCUIでは一般的にGUIの方が人間中心設計になっている","score":"","state":"correct","type":"multichoice"},{"answers":[{"index":0,"options":[{"selected":false,"text":"記憶のしやすさ","value":"1"},{"selected":false,"text":"学習のしやすさ","value":"2"},{"selected":false,"text":"効率性","value":"3"},{"selected":false,"text":"主観的満足度","value":"4"},{"selected":true,"text":"間違えにくさ","value":"5"}],"prompt":"操作ミスやエラーを起こしにくく、また起こしても簡単に回復することができる","selected":"間違えにくさ","selectedCorrectly":true,"selectedIncorrectly":false,"selectedValue":"5"},{"index":1,"options":[{"selected":true,"text":"記憶のしやすさ","value":"1"},{"selected":false,"text":"学習のしやすさ","value":"2"},{"selected":false,"text":"効率性","value":"3"},{"selected":false,"text":"主観的満足度","value":"4"},{"selected":false,"text":"間違えにくさ","value":"5"}],"prompt":"使い方を簡単に記憶することができ、断続して使用するユーザでも一度学習した内容を簡単に思い出せる","selected":"記憶のしやすさ","selectedCorrectly":true,"selectedIncorrectly":false,"selectedValue":"1"},{"index":2,"options":[{"selected":false,"text":"記憶のしやすさ","value":"1"},{"selected":false,"text":"学習のしやすさ","value":"2"},{"selected":false,"text":"効率性","value":"3"},{"selected":true,"text":"主観的満足度","value":"4"},{"selected":false,"text":"間違えにくさ","value":"5"}],"prompt":"ユーザが仕事を達成する速度よりも、負担を感じることなく、作業、経験が楽しいと感じるようにできる。ユーザが満足し、楽しく利用することができる。","selected":"主観的満足度","selectedCorrectly":true,"selectedIncorrectly":false,"selectedValue":"4"},{"index":3,"options":[{"selected":false,"text":"記憶のしやすさ","value":"1"},{"selected":true,"text":"学習のしやすさ","value":"2"},{"selected":false,"text":"効率性","value":"3"},{"selected":false,"text":"主観的満足度","value":"4"},{"selected":false,"text":"間違えにくさ","value":"5"}],"prompt":"初めて使用するシステムにおいて、簡単に使用可能であるかを表す","selected":"学習のしやすさ","selectedCorrectly":true,"selectedIncorrectly":false,"selectedValue":"2"},{"index":4,"options":[{"selected":false,"text":"記憶のしやすさ","value":"1"},{"selected":false,"text":"学習のしやすさ","value":"2"},{"selected":true,"text":"効率性","value":"3"},{"selected":false,"text":"主観的満足度","value":"4"},{"selected":false,"text":"間違えにくさ","value":"5"}],"prompt":"学習した後では高い生産性で作業ができる","selected":"効率性","selectedCorrectly":true,"selectedIncorrectly":false,"selectedValue":"3"}],"classes":["que","match","deferredfeedback","correct"],"id":"question-967726-5","number":"5","questionText":"p.11を参考にし、ユーザビリティ5原則について正しい組み合わせを選べ","rightAnswer":"正解: 操作ミスやエラーを起こしにくく、また起こしても簡単に回復することができる → 間違えにくさ, 使い方を簡単に記憶することができ、断続して使用するユーザでも一度学習した内容を簡単に思い出せる → 記憶のしやすさ, ユーザが仕事を達成する速度よりも、負担を感じることなく、作業、経験が楽しいと感じるようにできる。ユーザが満足し、楽しく利用することができる。 → 主観的満足度, 初めて使用するシステムにおいて、簡単に使用可能であるかを表す → 学習のしやすさ, 学習した後では高い生産性で作業ができる → 効率性","score":"","state":"correct","type":"match"},{"answers":[{"index":0,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"ガイドライン","text":"ガイドライン"},{"index":1,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"均一的な見た目","text":"均一的な見た目"},{"index":2,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"操作性","text":"操作性"}],"classes":["que","multianswer","deferredfeedback","correct"],"id":"question-967726-6","number":"6","questionParts":[{"text":"ガイドラインについてp.12を参考にして穴埋めしなさい\n・OSやハードウェア毎にユーザビリティに関する"},{"blank":0},{"text":"を設け、どのソフトウェアでも"},{"blank":1},{"text":"や"},{"blank":2},{"text":"を得られるようにすることが多くなっている"}],"questionText":"ガイドラインについてp.12を参考にして穴埋めしなさい\n・OSやハードウェア毎にユーザビリティに関する[空欄 1]を設け、どのソフトウェアでも[空欄 2]や[空欄 3]を得られるようにすることが多くなっている","rightAnswer":"","score":"","state":"correct","type":"multianswer","unsupportedBlanks":false},{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"インタフェースで使用する書体の数は最小限に抑える"},{"disabled":true,"index":1,"label":"b.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"重要さが異なる情報を表す時でもテキストのサイズを変更してはいけない"},{"disabled":true,"index":2,"label":"c.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"フォントは組み込み済みのテキストスタイルを使用する"},{"disabled":true,"index":3,"label":"d.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"画面を豪華にするために大量の種類のフォントを組み合わせて使用する"}],"classes":["que","multichoice","deferredfeedback","correct"],"id":"question-967726-7","number":"7","questionText":"p.13 iOSのガイドラインのURLを開き、文字（Foundations/Typography）を読み、正しい記述を選べ なお、英語サイトのため翻訳サイトなで翻訳して答えて良い","rightAnswer":"正解は次のとおりです: インタフェースで使用する書体の数は最小限に抑える, フォントは組み込み済みのテキストスタイルを使用する","score":"","state":"correct","type":"multichoice"}],"title":"理解度テスト７: 受験レビュー | HUS-Moodle","url":"https://moodle.hus.ac.jp/mod/quiz/review.php?attempt=959993&cmid=102874"},{"generatedAt":"2026-11-06T14:52:31.693Z","grade":{"percent":null,"text":""},"questionCount":4,"questions":[{"answers":[{"disabled":true,"index":0,"markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"\\1,580,000"}],"classes":["que","shortanswer","deferredfeedback","correct"],"id":"question-967737-1","number":"1","questionText":"p.24を参考に、指定のフォーマットで、以下の金額を表した時の正しい表示を記述せよ フォーマット：￥99,999 値：1580000","rightAnswer":"正解: \\1,580,000","score":"","state":"correct","type":"shortanswer"},{"answers":[{"disabled":true,"index":0,"markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"003.14100"}],"classes":["que","shortanswer","deferredfeedback","correct"],"id":"question-967737-2","number":"2","questionText":"p.24を参考に、指定のフォーマットで、以下の値を表した時の正しい表示を記述せよ フォーマット：000.00000 値：3.141","rightAnswer":"正解: 003.14100","score":"","state":"correct","type":"shortanswer"},{"answers":[{"disabled":true,"index":0,"markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"12.34567"}],"classes":["que","shortanswer","deferredfeedback","correct"],"id":"question-967737-3","number":"3","questionText":"p.24を参考に、指定のフォーマットで、以下の値を表した時の正しい表示を記述せよ フォーマット：0.00000 値：12.34567890123","rightAnswer":"正解: 12.34567","score":"","state":"correct","type":"shortanswer"},{"answers":[{"disabled":true,"index":0,"markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"25年10月15日 13:00:30"}],"classes":["que","shortanswer","deferredfeedback","correct"],"id":"question-967737-4","number":"4","questionImages":[{"alt":"","src":"https://moodle.hus.ac.jp/pluginfile.php/119750/question/questiontext/967737/4/4536956/%E6%97%A5%E4%BB%98%E3%83%95%E3%82%A9%E3%83%BC%E3%83%9E%E3%83%83%E3%83%88.png"}],"questionText":"以下の書式指定子を参考に、以下今の日付時刻を表した時の正しい表示を記述せよ フォーマット：yy年MM月dd日 HH:mm:ss （※日とHHの間は半角スペース） 現在の日付時刻：2025/10/15 午後1時0分30秒","rightAnswer":"正解: 25年10月15日 13:00:30","score":"","state":"correct","type":"shortanswer"}],"title":"理解度テスト８: 受験レビュー | HUS-Moodle","url":"https://moodle.hus.ac.jp/mod/quiz/review.php?attempt=960004&cmid=102875"},{"generatedAt":"2026-11-06T14:52:43.929Z","grade":{"percent":null,"text":""},"questionCount":2,"questions":[{"answers":[{"index":0,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"符号化","text":"符号化"},{"index":1,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"識別","text":"識別"},{"index":2,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"配列","text":"配列"},{"index":3,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"柔軟に対応","text":"柔軟に対応"}],"classes":["que","multianswer","deferredfeedback","correct"],"id":"question-975423-1","number":"1","questionParts":[{"text":"コードについてp.4を参考にして穴埋めしなさい\n・コードとは情報を"},{"blank":0},{"text":"したものである\n・データの"},{"blank":1},{"text":"、分類、"},{"blank":2},{"text":"（並べ替え）が容易になる\n・コードは将来的な拡張や変更に"},{"blank":3},{"text":"できるように設計する"}],"questionText":"コードについてp.4を参考にして穴埋めしなさい\n・コードとは情報を[空欄 1]したものである\n・データの[空欄 2]、分類、[空欄 3]（並べ替え）が容易になる\n・コードは将来的な拡張や変更に[空欄 4]できるように設計する","rightAnswer":"","score":"","state":"correct","type":"multianswer","unsupportedBlanks":false},{"answers":[],"classes":["que","numerical","deferredfeedback","correct"],"id":"question-975423-2","number":"2","questionText":"次のようなチェックディジット算出法を用いた場合、コード5732のチェックディジットは何になるか答えよ。 ①下位の桁から順に2、3、4、5の重みをつける ②各桁ごとに数値と重みの乗算を行い、加算する。ただし、乗算結果が2桁の 場合は、1桁ずつに分解して加算する。 ③加算結果を11で割った余り（モジュラス11）をチェックディジットとする。ただ し、余りが0と10の場合は0とする。","rightAnswer":"正解: 8","score":"","state":"correct","type":"numerical"}],"title":"理解度テスト９: 受験レビュー | HUS-Moodle","url":"https://moodle.hus.ac.jp/mod/quiz/review.php?attempt=967597&cmid=102878"},{"generatedAt":"2026-11-06T14:53:04.343Z","grade":{"percent":null,"text":""},"questionCount":7,"questions":[{"answers":[{"index":0,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"階層化","text":"階層化"},{"index":1,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"一覧できる","text":"一覧できる"},{"index":2,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"他のプログラム","text":"他のプログラム"},{"index":3,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"モジュール","text":"モジュール"}],"classes":["que","multianswer","deferredfeedback","correct"],"id":"question-975636-1","number":"1","questionParts":[{"text":"モジュール分割についてシート「モジュール分割の目的と条件」を参考にして穴埋めしなさい\n・プログラムを分かりやすく"},{"blank":0},{"text":"する\n・保守しやすい、処理内容が"},{"blank":1},{"text":"程度の大きさにする\n・同じ処理を行う"},{"blank":2},{"text":"でも利用できるようにする\n・修正をする場合は、その"},{"blank":3},{"text":"だけを修正すればよいようにする"}],"questionText":"モジュール分割についてシート「モジュール分割の目的と条件」を参考にして穴埋めしなさい\n・プログラムを分かりやすく[空欄 1]する\n・保守しやすい、処理内容が[空欄 2]程度の大きさにする\n・同じ処理を行う[空欄 3]でも利用できるようにする\n・修正をする場合は、その[空欄 4]だけを修正すればよいようにする","rightAnswer":"","score":"","state":"correct","type":"multianswer","unsupportedBlanks":false},{"answers":[{"index":0,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"変遷","text":"変遷"},{"index":1,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"出力","text":"出力"},{"index":2,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"最大抽象入力点","text":"最大抽象入力点"},{"index":3,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"最大抽象出力点","text":"最大抽象出力点"}],"classes":["que","multianswer","deferredfeedback","correct"],"id":"question-975636-2","number":"2","questionParts":[{"text":"STS分割についてシート「STS分割」を参考にして穴埋めしなさい\n・STS分割とは、データに着目し、入力データがどう"},{"blank":0},{"text":"して"},{"blank":1},{"text":"データになるかを追跡\n・入力データの原型をとどめなくなる"},{"blank":2},{"text":"と出力データとしての意味を持ってくる"},{"blank":3},{"text":"を探し分割する"}],"questionText":"STS分割についてシート「STS分割」を参考にして穴埋めしなさい\n・STS分割とは、データに着目し、入力データがどう[空欄 1]して[空欄 2]データになるかを追跡\n・入力データの原型をとどめなくなる[空欄 3]と出力データとしての意味を持ってくる[空欄 4]を探し分割する","rightAnswer":"","score":"","state":"correct","type":"multianswer","unsupportedBlanks":false},{"answers":[{"index":0,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"データの種類","text":"データの種類"},{"index":1,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"分岐する","text":"分岐する"},{"index":2,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"トランザクション","text":"トランザクション"},{"index":3,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"異なる","text":"異なる"}],"classes":["que","multianswer","deferredfeedback","correct"],"id":"question-975636-3","number":"3","questionParts":[{"text":"TR分割についてシート「TR(Transaction)分割」を参考にして穴埋めしなさい\n・TR分割とは、データの流れが存在せず、"},{"blank":0},{"text":"によってデータの流れが"},{"blank":1},{"text":"場合の分割法である\n・"},{"blank":2},{"text":"（処理の単位）ごとにデータの処理方法が"},{"blank":3},{"text":"場合に、その[1つ目の括弧の答え]ごとにモジュールを分割する"}],"questionText":"TR分割についてシート「TR(Transaction)分割」を参考にして穴埋めしなさい\n・TR分割とは、データの流れが存在せず、[空欄 1]によってデータの流れが[空欄 2]場合の分割法である\n・[空欄 3]（処理の単位）ごとにデータの処理方法が[空欄 4]場合に、その[1つ目の括弧の答え]ごとにモジュールを分割する","rightAnswer":"","score":"","state":"correct","type":"multianswer","unsupportedBlanks":false},{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"キーワード入力は「源泉」、図書DB検索は「変換」、図書リスト画面表示/図書リスト印刷は「吸収」に対応する"},{"disabled":true,"index":1,"label":"b.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"図書DB検索後に「図書リスト画面表示」と「図書リスト印刷」のどちらかの処理に分岐する"},{"disabled":true,"index":2,"label":"c.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"図書検索の制御モジュールからキーワード入力、図書DB検索、図書リスト画面表示、図書リスト印刷の順にモジュールを呼び出す"},{"disabled":true,"index":3,"label":"d.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"図書DB検索では、図書ファイルデータストアから図書名を取り出す"},{"disabled":true,"index":4,"label":"e.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"図書リスト画面表示はT(変換)に含まれる"}],"classes":["que","multichoice","deferredfeedback","correct"],"id":"question-975636-4","number":"4","questionImages":[{"alt":"","src":"https://moodle.hus.ac.jp/pluginfile.php/119750/question/questiontext/975636/4/4536977/STS.PNG"}],"questionText":"STS分割されたモジュール構造図を表した以下の図から読み取れることを選べ","rightAnswer":"正解は次のとおりです: 図書検索の制御モジュールからキーワード入力、図書DB検索、図書リスト画面表示、図書リスト印刷の順にモジュールを呼び出す, 図書DB検索では、図書ファイルデータストアから図書名を取り出す, キーワード入力は「源泉」、図書DB検索は「変換」、図書リスト画面表示/図書リスト印刷は「吸収」に対応する","score":"","state":"correct","type":"multichoice"},{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"入力データ振り分けで売上数データが入力されると売上データモジュールのみが実行され、その後在庫数ファイル更新が実行される"},{"disabled":true,"index":1,"label":"b.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"「仕入れデータ」「売上データ」「返品データ」の順に処理を行う"},{"disabled":true,"index":2,"label":"c.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"ファイル更新モジュールは仕入れ、売上げ、返品の3つのモジュール全て動作後に実行される"},{"disabled":true,"index":3,"label":"d.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"入力データ振り分け処理でデータによって処理先のモジュールを変える"},{"disabled":true,"index":4,"label":"e.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"入力データが仕入数でも売上数でも返品数でも在庫数が更新される"}],"classes":["que","multichoice","deferredfeedback","partiallycorrect"],"id":"question-975636-5","number":"5","questionImages":[{"alt":"","src":"https://moodle.hus.ac.jp/pluginfile.php/119750/question/questiontext/975636/5/4536978/TR.PNG"}],"questionText":"TR分割されたモジュール構造図を表した以下の図から読み取れることを選べ","rightAnswer":"正解は次のとおりです: 入力データ振り分け処理でデータによって処理先のモジュールを変える, 入力データ振り分けで売上数データが入力されると売上データモジュールのみが実行され、その後在庫数ファイル更新が実行される, 入力データが仕入数でも売上数でも返品数でも在庫数が更新される","score":"","state":"部分的に正解","type":"multichoice"},{"answers":[{"index":0,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"構造","text":"構造"},{"index":1,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"出力データ","text":"出力データ"},{"index":2,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"対応関係","text":"対応関係"},{"index":3,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"出力データ構造","text":"出力データ構造"},{"index":4,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"入力データ構造","text":"入力データ構造"}],"classes":["que","multianswer","deferredfeedback","correct"],"id":"question-975636-6","number":"6","questionParts":[{"text":"ジャクソン法についてシート「ジャクソン法」を参考にして穴埋めしなさい\n・入力データの"},{"blank":0},{"text":"と"},{"blank":1},{"text":"の構造の対応に基づいてプログラムの構造を導き出す手法である\n・入力データと出力データのデータ構造の構成要素の1対1の"},{"blank":2},{"text":"を見つける\n・"},{"blank":3},{"text":"をもとに、プログラム構造を作成する\n・"},{"blank":4},{"text":"でプログラム構造の検証を行う"}],"questionText":"ジャクソン法についてシート「ジャクソン法」を参考にして穴埋めしなさい\n・入力データの[空欄 1]と[空欄 2]の構造の対応に基づいてプログラムの構造を導き出す手法である\n・入力データと出力データのデータ構造の構成要素の1対1の[空欄 3]を見つける\n・[空欄 4]をもとに、プログラム構造を作成する\n・[空欄 5]でプログラム構造の検証を行う","rightAnswer":"","score":"","state":"correct","type":"multianswer","unsupportedBlanks":false},{"answers":[{"index":0,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"集合論","text":"集合論"},{"index":1,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"入力データ","text":"入力データ"},{"index":2,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"いつ","text":"いつ"},{"index":3,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"何回","text":"何回"}],"classes":["que","multianswer","deferredfeedback","correct"],"id":"question-975636-7","number":"7","questionParts":[{"text":"ワーニエ法についてシート「ワーニエ法」を参考にして穴埋めしなさい\n・ワーニエ法は"},{"blank":0},{"text":"に基づく構造的モジュール設計法である\n・ワーニエ法はジャクソン法と異なり"},{"blank":1},{"text":"を中心に構造を行う\n・入力データが「"},{"blank":2},{"text":"」「どこで」"},{"blank":3},{"text":"」発生するかをもとに、プログラム構造を作成する"}],"questionText":"ワーニエ法についてシート「ワーニエ法」を参考にして穴埋めしなさい\n・ワーニエ法は[空欄 1]に基づく構造的モジュール設計法である\n・ワーニエ法はジャクソン法と異なり[空欄 2]を中心に構造を行う\n・入力データが「[空欄 3]」「どこで」[空欄 4]」発生するかをもとに、プログラム構造を作成する","rightAnswer":"","score":"","state":"correct","type":"multianswer","unsupportedBlanks":false}],"title":"理解度テスト１０: 受験レビュー | HUS-Moodle","url":"https://moodle.hus.ac.jp/mod/quiz/review.php?attempt=967810&cmid=102879"},{"generatedAt":"2026-11-06T14:53:21.826Z","grade":{"percent":null,"text":""},"questionCount":5,"questions":[{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"モジュールが他のモジュールと複雑に結合しあう状態を目指す"},{"disabled":true,"index":1,"label":"b.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"モジュール分割基準にはモジュール強度とモジュール結合度の基準がある"},{"disabled":true,"index":2,"label":"c.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"モジュール強度と結合度を考慮した分割基準にはSTS分割とTR分割がある"},{"disabled":true,"index":3,"label":"d.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"モジュールは独立性が高くなるように分割する"},{"disabled":true,"index":4,"label":"e.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"独立性が高いモジュールは1つの機能のみを持つモジュールである"}],"classes":["que","multichoice","deferredfeedback","correct"],"id":"question-986743-1","number":"1","questionText":"モジュール分割する際の基準について正しい記述を選べ","rightAnswer":"正解は次のとおりです: モジュールは独立性が高くなるように分割する, 独立性が高いモジュールは1つの機能のみを持つモジュールである, モジュール分割基準にはモジュール強度とモジュール結合度の基準がある","score":"","state":"correct","type":"multichoice"},{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"モジュール結合度は低いほど良く、モジュール強度は高い方が良い状態である"},{"disabled":true,"index":1,"label":"b.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"モジュール強度が高いプログラムは1つのモジュールに1つの機能を持つのが良い"},{"disabled":true,"index":2,"label":"c.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"モジュール結合度が低い状態とは必要なデータのみを受け渡して利用する状態である"},{"disabled":true,"index":3,"label":"d.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"モジュール強度が低いと再利用しやすくなる"},{"disabled":true,"index":4,"label":"e.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"モジュール結合度は高いほど良く、モジュール強度は低い方が良い状態である"}],"classes":["que","multichoice","deferredfeedback","correct"],"id":"question-986743-2","number":"2","questionText":"p.5、p.6を参考にし、モジュール強度とモジュール結合度について正しい記述を選べ","rightAnswer":"正解は次のとおりです: モジュール強度が高いプログラムは1つのモジュールに1つの機能を持つのが良い, モジュール結合度は低いほど良く、モジュール強度は高い方が良い状態である, モジュール結合度が低い状態とは必要なデータのみを受け渡して利用する状態である","score":"","state":"correct","type":"multichoice"},{"answers":[{"index":0,"options":[{"selected":false,"text":"情報的強度","value":"1"},{"selected":false,"text":"機能的強度","value":"2"},{"selected":false,"text":"論理的強度","value":"3"},{"selected":false,"text":"手順的強度","value":"4"},{"selected":false,"text":"連絡的強度","value":"5"},{"selected":false,"text":"暗合的強度","value":"6"},{"selected":true,"text":"時間的強度","value":"7"}],"prompt":"複数の逐次的な機能を実行するモジュールで、機能間の関連性は弱いモジュール","selected":"時間的強度","selectedCorrectly":true,"selectedIncorrectly":false,"selectedValue":"7"},{"index":1,"options":[{"selected":true,"text":"情報的強度","value":"1"},{"selected":false,"text":"機能的強度","value":"2"},{"selected":false,"text":"論理的強度","value":"3"},{"selected":false,"text":"手順的強度","value":"4"},{"selected":false,"text":"連絡的強度","value":"5"},{"selected":false,"text":"暗合的強度","value":"6"},{"selected":false,"text":"時間的強度","value":"7"}],"prompt":"同じ構造のデータを扱う複数の機能をまとめたモジュール。多重の入り口を持つが単一の機能を実行するように作成されたモジュール","selected":"情報的強度","selectedCorrectly":true,"selectedIncorrectly":false,"selectedValue":"1"},{"index":2,"options":[{"selected":false,"text":"情報的強度","value":"1"},{"selected":false,"text":"機能的強度","value":"2"},{"selected":false,"text":"論理的強度","value":"3"},{"selected":false,"text":"手順的強度","value":"4"},{"selected":true,"text":"連絡的強度","value":"5"},{"selected":false,"text":"暗合的強度","value":"6"},{"selected":false,"text":"時間的強度","value":"7"}],"prompt":"複数の逐次的な機能を実行するモジュールで、同じデータを扱い、全ての機能間にデータの関連性があるモジュール","selected":"連絡的強度","selectedCorrectly":true,"selectedIncorrectly":false,"selectedValue":"5"},{"index":3,"options":[{"selected":false,"text":"情報的強度","value":"1"},{"selected":true,"text":"機能的強度","value":"2"},{"selected":false,"text":"論理的強度","value":"3"},{"selected":false,"text":"手順的強度","value":"4"},{"selected":false,"text":"連絡的強度","value":"5"},{"selected":false,"text":"暗合的強度","value":"6"},{"selected":false,"text":"時間的強度","value":"7"}],"prompt":"1つの固有の機能のみを実行するモジュール","selected":"機能的強度","selectedCorrectly":true,"selectedIncorrectly":false,"selectedValue":"2"},{"index":4,"options":[{"selected":false,"text":"情報的強度","value":"1"},{"selected":false,"text":"機能的強度","value":"2"},{"selected":true,"text":"論理的強度","value":"3"},{"selected":false,"text":"手順的強度","value":"4"},{"selected":false,"text":"連絡的強度","value":"5"},{"selected":false,"text":"暗合的強度","value":"6"},{"selected":false,"text":"時間的強度","value":"7"}],"prompt":"複数の機能を持ち、そのうちの1つが呼び出し元により選択され実行されるモジュール","selected":"論理的強度","selectedCorrectly":true,"selectedIncorrectly":false,"selectedValue":"3"},{"index":5,"options":[{"selected":false,"text":"情報的強度","value":"1"},{"selected":false,"text":"機能的強度","value":"2"},{"selected":false,"text":"論理的強度","value":"3"},{"selected":true,"text":"手順的強度","value":"4"},{"selected":false,"text":"連絡的強度","value":"5"},{"selected":false,"text":"暗合的強度","value":"6"},{"selected":false,"text":"時間的強度","value":"7"}],"prompt":"複数の逐次的な機能を実行するモジュールで、機能間の逐次的な関連性は問題解決の手段として意味付けられる","selected":"手順的強度","selectedCorrectly":true,"selectedIncorrectly":false,"selectedValue":"4"},{"index":6,"options":[{"selected":false,"text":"情報的強度","value":"1"},{"selected":false,"text":"機能的強度","value":"2"},{"selected":false,"text":"論理的強度","value":"3"},{"selected":false,"text":"手順的強度","value":"4"},{"selected":false,"text":"連絡的強度","value":"5"},{"selected":true,"text":"暗合的強度","value":"6"},{"selected":false,"text":"時間的強度","value":"7"}],"prompt":"モジュールが何のためのモジュールなのかを定義できず、全く関係無い複数の機能を集めたモジュール","selected":"暗合的強度","selectedCorrectly":true,"selectedIncorrectly":false,"selectedValue":"6"}],"classes":["que","match","deferredfeedback","correct"],"id":"question-986743-3","number":"3","questionText":"p.8～p.10を参考にし、モジュール強度の説明について正しい組み合わせを選べ","rightAnswer":"正解: 複数の逐次的な機能を実行するモジュールで、機能間の関連性は弱いモジュール → 時間的強度, 同じ構造のデータを扱う複数の機能をまとめたモジュール。多重の入り口を持つが単一の機能を実行するように作成されたモジュール → 情報的強度, 複数の逐次的な機能を実行するモジュールで、同じデータを扱い、全ての機能間にデータの関連性があるモジュール → 連絡的強度, 1つの固有の機能のみを実行するモジュール → 機能的強度, 複数の機能を持ち、そのうちの1つが呼び出し元により選択され実行されるモジュール → 論理的強度, 複数の逐次的な機能を実行するモジュールで、機能間の逐次的な関連性は問題解決の手段として意味付けられる → 手順的強度, モジュールが何のためのモジュールなのかを定義できず、全く関係無い複数の機能を集めたモジュール → 暗合的強度","score":"","state":"correct","type":"match"},{"answers":[{"index":0,"options":[{"selected":false,"text":"制御結合","value":"1"},{"selected":true,"text":"外部結合","value":"2"},{"selected":false,"text":"スタンプ結合","value":"3"},{"selected":false,"text":"内容結合","value":"4"},{"selected":false,"text":"共通結合","value":"5"},{"selected":false,"text":"データ結合","value":"6"}],"prompt":"共通域に定義したデータのうち、必要なデータ（1つだけのテーブルまたはリスト）を共有する結合","selected":"外部結合","selectedCorrectly":true,"selectedIncorrectly":false,"selectedValue":"2"},{"index":1,"options":[{"selected":false,"text":"制御結合","value":"1"},{"selected":false,"text":"外部結合","value":"2"},{"selected":false,"text":"スタンプ結合","value":"3"},{"selected":false,"text":"内容結合","value":"4"},{"selected":false,"text":"共通結合","value":"5"},{"selected":true,"text":"データ結合","value":"6"}],"prompt":"共通域にない同じ構造の必要なデータだけをモジュール間で受け渡しする結合","selected":"データ結合","selectedCorrectly":true,"selectedIncorrectly":false,"selectedValue":"6"},{"index":2,"options":[{"selected":false,"text":"制御結合","value":"1"},{"selected":false,"text":"外部結合","value":"2"},{"selected":false,"text":"スタンプ結合","value":"3"},{"selected":true,"text":"内容結合","value":"4"},{"selected":false,"text":"共通結合","value":"5"},{"selected":false,"text":"データ結合","value":"6"}],"prompt":"2つのモジュールで、一方のモジュールが他方のモジュールの内部を直接参照したり、他方のモジュールに分岐する結合","selected":"内容結合","selectedCorrectly":true,"selectedIncorrectly":false,"selectedValue":"4"},{"index":3,"options":[{"selected":false,"text":"制御結合","value":"1"},{"selected":false,"text":"外部結合","value":"2"},{"selected":true,"text":"スタンプ結合","value":"3"},{"selected":false,"text":"内容結合","value":"4"},{"selected":false,"text":"共通結合","value":"5"},{"selected":false,"text":"データ結合","value":"6"}],"prompt":"共通域にない同じ構造のデータをモジュール間で受け渡しするが、渡したデータ構造のうち一部のデータを使わない結合","selected":"スタンプ結合","selectedCorrectly":true,"selectedIncorrectly":false,"selectedValue":"3"},{"index":4,"options":[{"selected":true,"text":"制御結合","value":"1"},{"selected":false,"text":"外部結合","value":"2"},{"selected":false,"text":"スタンプ結合","value":"3"},{"selected":false,"text":"内容結合","value":"4"},{"selected":false,"text":"共通結合","value":"5"},{"selected":false,"text":"データ結合","value":"6"}],"prompt":"一方のモジュールが他方のモジュールに制御情報を渡す結合であり、機能コードや制御スイッチを渡すモジュールがこれにあたる","selected":"制御結合","selectedCorrectly":true,"selectedIncorrectly":false,"selectedValue":"1"},{"index":5,"options":[{"selected":false,"text":"制御結合","value":"1"},{"selected":false,"text":"外部結合","value":"2"},{"selected":false,"text":"スタンプ結合","value":"3"},{"selected":false,"text":"内容結合","value":"4"},{"selected":true,"text":"共通結合","value":"5"},{"selected":false,"text":"データ結合","value":"6"}],"prompt":"共通域に定義したデータ（グローバル変数）を複数のモジュールで直接参照したり、一部を共有する結合","selected":"共通結合","selectedCorrectly":true,"selectedIncorrectly":false,"selectedValue":"5"}],"classes":["que","match","deferredfeedback","correct"],"id":"question-986743-4","number":"4","questionText":"p.14～p.15を参考にし、モジュール結合度の説明について正しい組み合わせを選べ","rightAnswer":"正解: 共通域に定義したデータのうち、必要なデータ（1つだけのテーブルまたはリスト）を共有する結合 → 外部結合, 共通域にない同じ構造の必要なデータだけをモジュール間で受け渡しする結合 → データ結合, 2つのモジュールで、一方のモジュールが他方のモジュールの内部を直接参照したり、他方のモジュールに分岐する結合 → 内容結合, 共通域にない同じ構造のデータをモジュール間で受け渡しするが、渡したデータ構造のうち一部のデータを使わない結合 → スタンプ結合, 一方のモジュールが他方のモジュールに制御情報を渡す結合であり、機能コードや制御スイッチを渡すモジュールがこれにあたる → 制御結合, 共通域に定義したデータ（グローバル変数）を複数のモジュールで直接参照したり、一部を共有する結合 → 共通結合","score":"","state":"correct","type":"match"},{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"他モジュールへ値渡しで引数を渡すと、値はコピーされて渡される"},{"disabled":true,"index":1,"label":"b.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"ローカル変数とはモジュール外でも使用可能な変数である"},{"disabled":true,"index":2,"label":"c.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"値渡しで渡した値は、引き渡し先のモジュールで値を変更すると引渡し前の値も変わる"},{"disabled":true,"index":3,"label":"d.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"グローバル変数は定義したモジュールの中でのみ有効な変数である"},{"disabled":true,"index":4,"label":"e.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"ローカル変数はモジュールの中で生成されモジュールから抜けると消える変数である"},{"disabled":true,"index":5,"label":"f.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"グローバル変数とはプログラムのどこからでもアクセス可能な変数である"}],"classes":["que","multichoice","deferredfeedback","correct"],"id":"question-986743-5","number":"5","questionText":"p.16～p.17を参考にし、「グローバル変数による受け渡し」と「ローカル変数と引数の値渡し」について正しい記述を選べ","rightAnswer":"正解は次のとおりです: 他モジュールへ値渡しで引数を渡すと、値はコピーされて渡される, グローバル変数とはプログラムのどこからでもアクセス可能な変数である, ローカル変数はモジュールの中で生成されモジュールから抜けると消える変数である","score":"","state":"correct","type":"multichoice"}],"title":"理解度テスト１１: 受験レビュー | HUS-Moodle","url":"https://moodle.hus.ac.jp/mod/quiz/review.php?attempt=978808&cmid=102883"},{"generatedAt":"2026-11-06T14:53:39.975Z","grade":{"percent":null,"text":""},"questionCount":2,"questions":[{"answers":[{"index":0,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"アルゴリズム","text":"アルゴリズム"},{"index":1,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"コーディング","text":"コーディング"},{"index":2,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"忠実","text":"忠実"},{"index":3,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"机上確認","text":"机上確認"},{"index":4,"kind":"text","markedCorrect":true,"markedIncorrect":false,"rightAnswer":"コーディング規約","text":"コーディング規約"}],"classes":["que","multianswer","deferredfeedback","correct"],"id":"question-986922-1","number":"1","questionParts":[{"text":"プログラミングついてシート「プログラミング」を参考にして穴埋めしなさい\n・プログラム設計で定めた処理手続き（"},{"blank":0},{"text":"）をプログラム言語を用いて記述（"},{"blank":1},{"text":"）すること\n・設計に"},{"blank":2},{"text":"にプログラムを作成することが重要\n・机上デバッグ、コードレビューなど、実機テスト前の"},{"blank":3},{"text":"を十分に行う\n・複数人での開発時にプログラミングのスタイルに一貫性を持たせ、明瞭性を高めるために"},{"blank":4},{"text":"（基準、標準）を定める"}],"questionText":"プログラミングついてシート「プログラミング」を参考にして穴埋めしなさい\n・プログラム設計で定めた処理手続き（[空欄 1]）をプログラム言語を用いて記述（[空欄 2]）すること\n・設計に[空欄 3]にプログラムを作成することが重要\n・机上デバッグ、コードレビューなど、実機テスト前の[空欄 4]を十分に行う\n・複数人での開発時にプログラミングのスタイルに一貫性を持たせ、明瞭性を高めるために[空欄 5]（基準、標準）を定める","rightAnswer":"","score":"","state":"correct","type":"multianswer","unsupportedBlanks":false},{"answers":[{"disabled":true,"index":0,"label":"a.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"コンパイル形式言語ではコンパイラがアセンブラ言語で作られたオブジェクトモジュールを生成し、リンカでリンクしてロードモジュールを生成する"},{"disabled":true,"index":1,"label":"b.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"インタプリタ言語ではコンパイルは行わず、1命令ごとに機械語に変換してインタプリタが実行する"},{"disabled":true,"index":2,"label":"c.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"中間言語ではバイナリコードと呼ばれる中間言語を出力し、それを仮想マシンが機械語に変換して実行する"},{"disabled":true,"index":3,"label":"d.","markedCorrect":true,"markedIncorrect":false,"selected":true,"text":"コンパイル形式言語のリンカはソースファイルから生成したオブジェクトモジュールとライブラリモジュールをリンクしてロードモジュールを生成する"},{"disabled":true,"index":4,"label":"e.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"コンパイル形式言語では最終的にOSが用意した仮想マシン上でロードモジュールが実行される"},{"disabled":true,"index":5,"label":"f.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"コンパイル形式言語ではソースプログラムを1命令ごとに機械語に変換して実行する"},{"disabled":true,"index":6,"label":"g.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"中間言語は各ハードウェア用の仮想マシンを用意すれば異なるマシンでも差異を吸収して実行可能であり、実行速度も非常に高速である"},{"disabled":true,"index":7,"label":"h.","markedCorrect":false,"markedIncorrect":false,"selected":false,"text":"インタプリタ言語ではソースプログラムを1命令ごとに中間言語に変換して実行する"}],"classes":["que","multichoice","deferredfeedback","correct"],"id":"question-986922-2","number":"2","questionText":"コンパイル形式言語、インタプリタ形式言語、中間言語について正しい記述を選べ","rightAnswer":"正解は次のとおりです: コンパイル形式言語ではコンパイラがアセンブラ言語で作られたオブジェクトモジュールを生成し、リンカでリンクしてロードモジュールを生成する, インタプリタ言語ではコンパイルは行わず、1命令ごとに機械語に変換してインタプリタが実行する, 中間言語ではバイナリコードと呼ばれる中間言語を出力し、それを仮想マシンが機械語に変換して実行する, コンパイル形式言語のリンカはソースファイルから生成したオブジェクトモジュールとライブラリモジュールをリンクしてロードモジュールを生成する","score":"","state":"correct","type":"multichoice"}],"title":"理解度テスト１２: 受験レビュー | HUS-Moodle","url":"https://moodle.hus.ac.jp/mod/quiz/review.php?attempt=978987&cmid=102884"}]};
+const state = {
+  pool: [],
+  queue: [],
+  current: null,
+  answered: false,
+  answeredCount: 0,
+  correctCount: 0,
+  skippedCount: 0,
+  outcomes: [],
+  saved: false,
+  startedAt: null,
+  selectedQuiz: null,
+};
+
+
+const $ = (id) => document.getElementById(id);
+const clean = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
+const feedback = $('feedback');
+
+const shuffle = (items) => {
+  const array = [...items];
+  for (let i = array.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+};
+
+const renderStats = () => {
+  const taken = state.pool.length - state.queue.length;
+  $('progressCount').textContent = `${taken} / ${state.pool.length}`;
+  $('correctCount').textContent = String(state.correctCount);
+  $('skippedCount').textContent = String(state.skippedCount);
+};
+
+// 「正解: 」プレフィックスを除いた正解テキスト本体
+const rightAnswerBody = (question) =>
+  clean(question.rightAnswer).replace(/^[^:：]*[:：]\s*/, '');
+
+// 記述式はカンマ・コロン・空白も解答の一部なので、選択式の分割処理を使わない。
+const shortAnswerText = (question) => {
+  const right = String(question.rightAnswer ?? '').trim()
+    .replace(/^(?:正解|正しい答え|the correct answer is|correct answer)\s*[:：]\s*/i, '');
+  if (right) return right;
+  const answer = question.answers?.find((item) => item.markedCorrect);
+  return String(answer?.text ?? '').trim();
+};
+
+// 正解の選択肢インデックスを求める。
+// 正解した受験データなら markedCorrect が付いているが、
+// 不正解だった問題は rightAnswer のテキストと突き合わせて判定する。
+const correctIndices = (question) => {
+  const body = rightAnswerBody(question);
+  const parts = body ? body.split(/,\s*/).map(clean) : [];
+  const indices = [];
+
+  for (const [index, answer] of question.answers.entries()) {
+    const text = clean(answer.text);
+    if (answer.markedCorrect || (body && (text === body || parts.includes(text)))) {
+      indices.push(index);
+    }
+  }
+
+  return indices;
+};
+
+// Moodleの「正解: 用語 → 説明, 用語 → 説明, ...」を prompt → 正解テキスト のMapにする
+const parseRightAnswerMap = (text) => {
+  const map = new Map();
+  const cleaned = clean(text);
+  if (!cleaned) return map;
+  const body = cleaned.replace(/^[^:：]*[:：]\s*/, '');
+  for (const pair of body.split(/,\s*/)) {
+    const [prompt, answer] = pair.split(/\s*→\s*/);
+    if (prompt && answer) map.set(clean(prompt), clean(answer));
+  }
+  return map;
+};
+
+const setFeedback = (text, tone) => {
+  feedback.textContent = text;
+  feedback.className = tone ? `feedback ${tone}` : 'feedback';
+};
+
+const showRightAnswer = (question) => {
+  const el = $('rightAnswer');
+  const text = question?.type === 'shortanswer'
+    ? (shortAnswerText(question) ? `正解: ${shortAnswerText(question)}` : '')
+    : question && MMQuiz.isCloze(question)
+      ? (question.answers || []).map((answer, index) => `空欄 ${index + 1}: ${MMQuiz.blankAnswerText(answer) || '正解データなし'}`).join('\n')
+    : clean(question?.rightAnswer);
+  if (!text) {
+    el.classList.add('hidden');
+    el.textContent = '';
+    return;
+  }
+  el.textContent = text;
+  el.classList.remove('hidden');
+};
+
+const finishQuestion = (isCorrect, incorrectMessage = '不正解。緑が正解、赤が誤答です。') => {
+  state.outcomes.push({ number: state.current.number, id: state.current.id, result: isCorrect ? 'correct' : 'incorrect' });
+  state.answeredCount += 1;
+  if (isCorrect) state.correctCount += 1;
+  renderStats();
+  setFeedback(isCorrect ? '正解。「次の問題へ」で進んでください。' : incorrectMessage, isCorrect ? 'correct' : 'incorrect');
+  showRightAnswer(state.current);
+  $('nextButton').textContent = state.queue.length ? '次の問題へ' : '結果を見る';
+};
+
+const buildChoiceButton = (answer, index) => {
+  const choiceLabel = answer.label || `${String.fromCharCode(97 + index)}.`;
+  const rawText = clean(answer.text);
+  const choiceText = rawText.startsWith(choiceLabel) ? rawText.slice(choiceLabel.length).trimStart() : rawText;
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'answer-choice';
+  button.dataset.answerIndex = String(index);
+
+  const key = document.createElement('span');
+  key.className = 'key';
+  key.textContent = choiceLabel;
+
+  const body = document.createElement('span');
+  body.className = 'body';
+  body.textContent = choiceText || rawText;
+
+  button.append(key, body);
+  return button;
+};
+
+const markChoiceButtons = (correctSet, selectedSet) => {
+  const buttons = [...$('answers').querySelectorAll('[data-answer-index]')];
+
+  for (const button of buttons) {
+    const index = Number(button.dataset.answerIndex);
+    button.disabled = true;
+    if (correctSet.has(index)) button.classList.add('correct');
+    if (selectedSet.has(index) && !correctSet.has(index)) button.classList.add('incorrect');
+    button.classList.remove('selected');
+  }
+};
+
+const revealSingleChoice = (question, selectedIndex, correctSet) => {
+  if (state.answered || state.current !== question) return;
+  state.answered = true;
+  $('judgeRow').classList.add('hidden');
+
+  markChoiceButtons(correctSet, new Set([selectedIndex]));
+  finishQuestion(correctSet.has(selectedIndex));
+};
+
+const judgeMultiChoice = (question, correctSet) => {
+  if (state.answered || state.current !== question) return;
+
+  const selected = new Set(
+    [...$('answers').querySelectorAll('.answer-choice.selected')]
+      .map((button) => Number(button.dataset.answerIndex))
+  );
+
+  if (!selected.size) {
+    setFeedback('1つ以上選択してから答え合わせしてください。', '');
+    return;
+  }
+
+  state.answered = true;
+  $('judgeRow').classList.add('hidden');
+  markChoiceButtons(correctSet, selected);
+
+  const isCorrect = selected.size === correctSet.size && [...selected].every((index) => correctSet.has(index));
+  finishQuestion(isCorrect);
+};
+
+const checkMatchProgress = (question) => {
+  if (state.answered || state.current !== question) return;
+
+  const selects = [...$('answers').querySelectorAll('select')];
+  if (!selects.every((select) => select.value !== '')) return;
+
+  state.answered = true;
+  let allCorrect = true;
+
+  for (const select of selects) {
+    const row = select.closest('.match-row');
+    select.disabled = true;
+    const correctValue = select.dataset.correctValue;
+    if (!correctValue) continue;
+    if (select.value === correctValue) {
+      row.classList.add('correct');
+    } else {
+      row.classList.add('incorrect');
+      allCorrect = false;
+    }
+  }
+
+  finishQuestion(allCorrect);
+};
+
+const renderShortAnswer = (question) => {
+  const correctText = shortAnswerText(question);
+  if (!correctText) {
+    setFeedback('この記述問題は正解データがありません。「スキップ」で先へ進んでください。', '');
+    return;
+  }
+
+  const li = document.createElement('li');
+  const label = document.createElement('label');
+  label.className = 'written-answer';
+  const caption = document.createElement('span');
+  caption.textContent = '回答';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'short-answer-input';
+  input.autocomplete = 'off';
+  input.spellcheck = false;
+  label.append(caption, input);
+  li.appendChild(label);
+  $('answers').appendChild(li);
+  setFeedback('回答を入力して「答え合わせ」を押してください。表示された正解と文字・記号・空白を照合します（前後の空白は除く）。', '');
+
+  const judge = () => {
+    if (state.answered || state.current !== question) return;
+    if (!input.value.trim()) {
+      setFeedback('回答を入力してから答え合わせしてください。', '');
+      return;
+    }
+    const isCorrect = input.value.trim() === correctText;
+    state.answered = true;
+    input.disabled = true;
+    input.classList.add(isCorrect ? 'correct' : 'incorrect');
+    $('judgeRow').classList.add('hidden');
+    finishQuestion(isCorrect, '不正解。下に表示された正解を確認してください。');
+  };
+  $('judgeRow').classList.remove('hidden');
+  $('judgeButton').onclick = judge;
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && !event.isComposing && event.keyCode !== 229) {
+      event.preventDefault();
+      judge();
+    }
+  });
+};
+
+const renderCloze = (question) => {
+  if (!question.questionParts?.some(part => 'blank' in part) || !question.answers?.length) {
+    setFeedback('この穴埋め問題には空欄の位置データがありません。Moodleの受験レビュー画面から再取得してください。', '');
+    return;
+  }
+  $('questionText').classList.add('hidden');
+  const body = document.createElement('li');
+  body.className = 'cloze-question';
+  const fields = [];
+  for (const part of question.questionParts) {
+    if ('text' in part) {
+      body.append(document.createTextNode(part.text));
+    } else if (part.image) {
+      const image = document.createElement('img');
+      image.src = part.image.src;
+      image.alt = part.image.alt || '';
+      body.append(image);
+    } else if ('blank' in part) {
+      const answer = question.answers[part.blank];
+      const select = answer?.kind === 'select';
+      const input = document.createElement(select ? 'select' : 'input');
+      input.className = 'short-answer-input cloze-input';
+      input.setAttribute('aria-label', `空欄 ${part.blank + 1}`);
+      if (select) {
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = `(${part.blank + 1}) 選択…`;
+        input.append(placeholder);
+        for (const option of answer.options || []) {
+          if (option.value === '') continue;
+          const opt = document.createElement('option');
+          opt.value = option.value;
+          opt.textContent = option.text;
+          input.append(opt);
+        }
+      } else {
+        input.type = 'text';
+        input.autocomplete = 'off';
+        input.spellcheck = false;
+        input.placeholder = `(${part.blank + 1})`;
+      }
+      body.append(input);
+      fields.push({ input, answer, select });
+    }
+  }
+  $('answers').append(body);
+  if (question.unsupportedBlanks) {
+    setFeedback('この問題には対応していない形式の空欄が含まれています。「スキップ」で先へ進んでください。', '');
+    return;
+  }
+  if (fields.some(field => !MMQuiz.blankAnswerText(field.answer))) {
+    setFeedback('一部の空欄の正解データがありません。受験レビュー画面から再取得するか「スキップ」で先へ進んでください。', '');
+    return;
+  }
+  setFeedback('文章中の空欄をすべて埋めて「答え合わせ」を押してください。', '');
+  const judge = () => {
+    if (state.answered || state.current !== question) return;
+    const empty = fields.find(field => !field.input.value.trim());
+    if (empty) {
+      setFeedback('すべての空欄を埋めてから答え合わせしてください。', '');
+      empty.input.focus();
+      return;
+    }
+    state.answered = true;
+    let allCorrect = true;
+    for (const { input, answer, select } of fields) {
+      const response = select ? input.selectedOptions[0].textContent.trim() : input.value.trim();
+      const correct = response === MMQuiz.blankAnswerText(answer);
+      input.classList.add(correct ? 'correct' : 'incorrect');
+      input.disabled = true;
+      if (!correct) allCorrect = false;
+    }
+    $('judgeRow').classList.add('hidden');
+    finishQuestion(allCorrect, '不正解の空欄があります。赤い入力欄と、下に表示された各空欄の正解を確認してください。');
+  };
+  $('judgeRow').classList.remove('hidden');
+  $('judgeButton').onclick = judge;
+  for (const { input } of fields) input.addEventListener('keydown', event => {
+    if (event.key === 'Enter' && !event.isComposing && event.keyCode !== 229) {
+      event.preventDefault();
+      judge();
+    }
+  });
+};
+
+const renderQuestion = (question) => {
+  question = MMQuiz.normalize(question);
+  state.current = question;
+  state.answered = false;
+  renderStats();
+  $('nextButton').textContent = 'スキップ';
+  $('questionText').classList.remove('hidden');
+  const shownInPass = state.pool.length - state.queue.length;
+  $('questionBadge').textContent = `第${question.number}問`;
+  $('questionProgress').textContent = state.pool.length ? `${shownInPass} / ${state.pool.length}` : '';
+  $('questionSource').textContent = question.sourceTitle || '';
+  $('questionText').textContent = question.questionText || '(問題文なし)';
+  setFeedback('答えを選ぶと、その場で答え合わせできます。', '');
+  showRightAnswer(null);
+  $('judgeRow').classList.add('hidden');
+
+  const answers = $('answers');
+  answers.innerHTML = '';
+
+  if (MMQuiz.isCloze(question)) {
+    renderCloze(question);
+    return;
+  }
+
+  if (question.type === 'shortanswer' || question.type === 'numerical') {
+    renderShortAnswer(question);
+    return;
+  }
+
+  if (!question.answers?.length) {
+    setFeedback('この問題には選択肢データがありません。「次にすすむ」で先へ進んでください。', '');
+    return;
+  }
+
+  if (question.type === 'match') {
+    const rightMap = parseRightAnswerMap(question.rightAnswer);
+    setFeedback('全ての項目を選ぶと、自動で答え合わせされます。', '');
+
+    for (const row of question.answers) {
+      const li = document.createElement('li');
+      li.className = 'match-row';
+
+      const term = document.createElement('span');
+      term.className = 'term';
+      term.textContent = clean(row.prompt);
+
+      const select = document.createElement('select');
+
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = '選択...';
+      select.appendChild(placeholder);
+
+      // 正解の突き合わせ: rightAnswer のマップ、なければ受験時の selectedCorrectly を使う
+      const correctText = rightMap.get(clean(row.prompt));
+      let correctOption = (row.options || []).find((option) => clean(option.text) === correctText);
+      if (!correctOption && row.selectedCorrectly) {
+        correctOption = (row.options || []).find((option) => option.value === row.selectedValue);
+      }
+      select.dataset.correctValue = correctOption ? correctOption.value : '';
+
+      for (const option of shuffle(row.options || [])) {
+        const opt = document.createElement('option');
+        opt.value = option.value;
+        opt.textContent = clean(option.text);
+        select.appendChild(opt);
+      }
+
+      select.addEventListener('change', () => checkMatchProgress(question));
+
+      li.append(term, select);
+      answers.appendChild(li);
+    }
+    return;
+  }
+
+  const correctSet = new Set(correctIndices(question));
+
+  if (!correctSet.size) {
+    setFeedback('この問題は正解データが特定できませんでした。「次にすすむ」で先へ進んでください。', '');
+  }
+
+  const multi = correctSet.size > 1;
+
+  for (const answer of question.answers) {
+    const li = document.createElement('li');
+    li.appendChild(buildChoiceButton(answer, answer.index));
+    answers.appendChild(li);
+  }
+
+  if (multi) {
+    setFeedback(`正解は${correctSet.size}つあります。選択して「答え合わせ」を押してください。`, '');
+    $('judgeRow').classList.remove('hidden');
+    $('judgeButton').onclick = () => judgeMultiChoice(question, correctSet);
+  }
+
+  answers.querySelectorAll('[data-answer-index]').forEach((button) => {
+    button.addEventListener('click', () => {
+      if (state.answered) return;
+      if (multi) {
+        button.classList.toggle('selected');
+      } else {
+        revealSingleChoice(question, Number(button.dataset.answerIndex), correctSet);
+      }
+    });
+  });
+};
+
+const showEmptyState = (message) => {
+  $('questionBadge').textContent = '-';
+  $('questionProgress').textContent = '';
+  $('questionSource').textContent = '';
+  $('questionText').textContent = message;
+  $('answers').innerHTML = '';
+  $('judgeRow').classList.add('hidden');
+  $('nextButton').classList.add('hidden');
+  setFeedback('', '');
+  showRightAnswer(null);
+};
+
+// 全問終了後の結果画面。全問スキップなら 0% になる
+const showResults = () => {
+  state.current = null;
+  renderStats();
+  saveResult();
+
+  const total = state.pool.length;
+  const percent = total ? Math.round((state.correctCount / total) * 1000) / 10 : 0;
+
+  $('resultPercent').textContent = `${percent}%`;
+  $('resultDetail').textContent =
+    `正解 ${state.correctCount} / ${total}問\n回答 ${state.answeredCount}問 ／ スキップ ${state.skippedCount}問`;
+
+  $('questionBadge').textContent = '結果';
+  $('questionProgress').textContent = '';
+  $('questionSource').textContent = '';
+  $('questionText').classList.add('hidden');
+  $('answers').innerHTML = '';
+  $('judgeRow').classList.add('hidden');
+  $('nextButton').classList.add('hidden');
+  setFeedback('', '');
+  showRightAnswer(null);
+  $('results').classList.remove('hidden');
+};
+
+const showNext = () => {
+  if (!state.queue.length) {
+    showResults();
+    return;
+  }
+  renderQuestion(state.queue.shift());
+};
+
+// スキップ（未回答のまま進む）または回答後に次へ進む
+const onNext = () => {
+  if (!state.current) return;
+  if (!state.answered) {
+    state.skippedCount += 1;
+    state.outcomes.push({ number: state.current.number, id: state.current.id, result: 'skipped' });
+  }
+  state.current = null;
+  showNext();
+};
+
+const restart = () => {
+  state.outcomes = [];
+  state.saved = false;
+  state.startedAt = new Date().toISOString();
+  $('saveStatus').textContent = '';
+  state.answeredCount = 0;
+  state.correctCount = 0;
+  state.skippedCount = 0;
+  state.current = null;
+  state.queue = [...state.pool];
+  $('results').classList.add('hidden');
+  $('nextButton').classList.remove('hidden');
+  renderStats();
+
+  if (!state.pool.length) {
+    showEmptyState('このフォルダには問題がありません。');
+    return;
+  }
+
+  showNext();
+};
+
+const buildPool = (folder) => MMQuiz.buildPool(folder);
+
+// フォルダを、拡張機能なしで単体で動く静的HTML（CSS/JS/問題データ入り）として書き出す。
+// HTML・出題処理・共通処理を取得して埋め込み、拡張機能と同じ処理で動かす。
+// 注意: このファイル内に閉じscriptタグを文字列リテラルで書くと書き出したHTMLが壊れるため、必ず連結で作ること。
+const exportStandaloneHtml = async (folder) => {
+  const [htmlText, jsText, coreText] = await Promise.all([
+    fetch(chrome.runtime.getURL('quiz.html')).then((res) => res.text()),
+    fetch(chrome.runtime.getURL('quiz.js')).then((res) => res.text()),
+    fetch(chrome.runtime.getURL('quiz-core.js')).then((res) => res.text()),
+  ]);
+
+  // JSON内の < をエスケープして、問題文に閉じタグがあってもscriptが壊れないようにする
+  const data = JSON.stringify({ name: folder.name, quizzes: folder.quizzes }).replace(/</g, '\\u003c');
+  const scriptOpen = '<' + 'script>';
+  const scriptClose = '<' + '/script>';
+  const externalTag = '<' + 'script src="quiz.js">' + scriptClose;
+  const inlineScript = `${scriptOpen}\nwindow.__EMBEDDED_QUIZ__ = ${data};\n${jsText}\n${scriptClose}`;
+  const coreTag = '<' + 'script src="quiz-core.js">' + scriptClose;
+  const output = htmlText.replace(coreTag, () => `${scriptOpen}\n${coreText}\n${scriptClose}`)
+    .replace(externalTag, () => inlineScript);
+
+  const safeName = folder.name.replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, '_').slice(0, 80) || 'quiz';
+  const timestamp = new Date().toISOString().slice(0, 10);
+  const blob = new Blob([output], { type: 'text/html;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+
+  anchor.href = url;
+  anchor.download = `${safeName}_出題_${timestamp}.html`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+
+
+let quizFolder;
+let storageKey;
+let historyRecords = [];
+let storageReady = true;
+const shortTitle = quiz => quiz.title.split(':')[0].trim();
+const quizKey = quiz => {
+  try { return new URL(quiz.url).searchParams.get('cmid') || quiz.title; }
+  catch { return quiz.title; }
+};
+const loadHistory = () => {
+  try {
+    const raw = localStorage.getItem(storageKey);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed) || !parsed.every(r => r && typeof r.quizKey === 'string' && typeof r.title === 'string' && typeof r.finishedAt === 'string' && Number.isFinite(r.percent) && Array.isArray(r.outcomes))) throw new Error('Invalid history');
+    historyRecords = parsed;
+    const probe = storageKey + ':probe';
+    localStorage.setItem(probe, '1');
+    localStorage.removeItem(probe);
+    $('storageNotice').textContent = '履歴は同じブラウザ・同じファイルの場所で利用できます。ファイルの移動やブラウザのデータ削除に備え、必要な履歴はJSONで保存してください。';
+  } catch {
+    storageReady = false;
+    $('storageNotice').textContent = '保存済み履歴の読み込み、またはブラウザへの保存ができません。この画面内では履歴を保持します。必要な結果は「履歴をJSONで保存」で保存してください。';
+  }
+};
+const renderSelection = () => {
+  $('rounds').replaceChildren();
+  quizFolder.quizzes.forEach(quiz => {
+    const records = historyRecords.filter(r => r.quizKey === quizKey(quiz));
+    const button = document.createElement('button');
+    button.className = 'round';
+    const title = document.createElement('strong');
+    title.textContent = shortTitle(quiz);
+    const detail = document.createElement('small');
+    detail.textContent = `${quiz.questions.length}問 ／ 受験 ${records.length}回`;
+    const score = document.createElement('small');
+    score.textContent = records.length ? `前回 ${records[0].percent}% ／ 最高 ${Math.max(...records.map(r => r.percent))}%` : '未受験';
+    button.append(title, detail, score);
+    button.addEventListener('click', () => {
+      state.selectedQuiz = quiz;
+      state.pool = quiz.questions.map(q => ({ ...MMQuiz.normalize(q), sourceTitle: shortTitle(quiz) }));
+      $('selection').classList.add('hidden');
+      $('exam').classList.remove('hidden');
+      restart();
+    });
+    $('rounds').append(button);
+  });
+};
+const renderHistory = () => {
+  $('history').replaceChildren();
+  if (!historyRecords.length) { $('history').textContent = 'まだ受験履歴はありません。'; return; }
+  const labels = { correct: '正解', incorrect: '不正解', skipped: 'スキップ' };
+  historyRecords.forEach(record => {
+    const item = document.createElement('details');
+    item.className = 'history-row';
+    const summary = document.createElement('summary');
+    summary.textContent = `${record.title} ｜ ${record.percent}% ｜ ${new Date(record.finishedAt).toLocaleString('ja-JP')}`;
+    const detail = document.createElement('div');
+    detail.textContent = `正解 ${record.correct} / ${record.total}問 ／ スキップ ${record.skipped}問`;
+    const list = document.createElement('div');
+    list.textContent = record.outcomes.map(q => `第${q.number}問：${labels[q.result] || q.result}`).join(' ／ ');
+    item.append(summary, detail, list);
+    $('history').append(item);
+  });
+};
+const saveResult = () => {
+  if (state.saved) return;
+  state.saved = true;
+  const total = state.pool.length;
+  historyRecords.unshift({ quizKey: quizKey(state.selectedQuiz), title: shortTitle(state.selectedQuiz),
+    startedAt: state.startedAt, finishedAt: new Date().toISOString(),
+    total, correct: state.correctCount, answered: state.answeredCount, skipped: state.skippedCount,
+    percent: total ? Math.round(state.correctCount / total * 1000) / 10 : 0,
+    outcomes: state.outcomes.map(q => ({ ...q })) });
+  historyRecords = historyRecords.slice(0, 500);
+  try {
+    if (!storageReady) throw new Error('Storage unavailable');
+    localStorage.setItem(storageKey, JSON.stringify(historyRecords));
+    $('saveStatus').textContent = '受験結果をブラウザに保存しました。';
+  } catch {
+    $('saveStatus').textContent = 'ブラウザに保存できませんでした。「履歴をJSONで保存」から結果を保存してください。';
+  }
+  renderHistory();
+  renderSelection();
+};
+
+const init = async () => {
+  // 書き出した単体HTMLではデータが埋め込まれている。拡張機能内ではストレージから読む
+  const embedded = window.__EMBEDDED_QUIZ__;
+  let folder = embedded || null;
+
+  if (!folder) {
+    const folderId = new URLSearchParams(location.search).get('folder');
+    const { folders } = await chrome.storage.local.get('folders');
+    folder = (Array.isArray(folders) ? folders : []).find((item) => item.id === folderId);
+  }
+
+  if (!folder) {
+    showEmptyState('フォルダが見つかりませんでした。ポップアップから開き直してください。');
+    return;
+  }
+
+  document.title = `${folder.name} の出題 | Moodle Quiz Scraper`;
+  $('folderName').textContent = folder.name;
+
+  quizFolder = folder;
+  storageKey = 'moodle-round-results:v1:' + encodeURIComponent(folder.name);
+  loadHistory();
+  $('folderInfo').textContent = `全${folder.quizzes.length}回 ／ ${folder.quizzes.reduce((n, q) => n + q.questions.length, 0)}問`;
+  renderSelection();
+  renderHistory();
+  $('backButton').addEventListener('click', () => {
+    if (state.current && !confirm('受験を終了して回の選択へ戻りますか？ 途中の結果は保存されません。')) return;
+    state.current = null;
+    $('exam').classList.add('hidden');
+    $('selection').classList.remove('hidden');
+    renderSelection();
+  });
+  $('downloadHistory').addEventListener('click', () => {
+    const blob = new Blob([JSON.stringify({ subject: quizFolder.name, results: historyRecords }, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = quizFolder.name + '_受験履歴.json';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+
+  $('nextButton').addEventListener('click', onNext);
+  $('restartButton').addEventListener('click', () => {
+    if (!state.current || confirm('この回を最初からやり直しますか？ 途中の結果は保存されません。')) restart();
+  });
+  $('resultRestart').addEventListener('click', restart);
+
+  const exportButton = $('exportHtmlButton');
+  if (embedded) {
+    // 単体HTML内では再書き出しできない（chrome APIがない）ため非表示にする
+    exportButton.classList.add('hidden');
+  } else {
+    exportButton.addEventListener('click', () => exportStandaloneHtml(folder));
+  }
+
+};
+
+init();
+
+</script>
+</body>
+</html>
